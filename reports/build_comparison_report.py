@@ -288,17 +288,6 @@ def build_styles() -> dict[str, ParagraphStyle]:
             firstLineIndent=-2.5 * mm,
             spaceAfter=1.1 * mm,
         ),
-        "Reference": ParagraphStyle(
-            "Reference",
-            parent=base["BodyText"],
-            fontName="SourceSerif",
-            fontSize=7.8,
-            leading=10.5,
-            textColor=INK,
-            leftIndent=4 * mm,
-            firstLineIndent=-4 * mm,
-            spaceAfter=0.9 * mm,
-        ),
         "Code": ParagraphStyle(
             "Code",
             parent=base["Code"],
@@ -928,6 +917,43 @@ def build_story(data: dict[str, dict], style_map) -> list:
         compact=True,
     )
 
+    implementation = ruled_table(
+        [
+            [
+                Paragraph("Component", style_map["TableHeader"]),
+                Paragraph("Location", style_map["TableHeader"]),
+                Paragraph("Role", style_map["TableHeader"]),
+            ],
+            [
+                Paragraph("Dataset", style_map["TableCell"]),
+                Paragraph("data.py", style_map["TableCell"]),
+                Paragraph("construct A and B canvases", style_map["TableCell"]),
+            ],
+            [
+                Paragraph("Models", style_map["TableCell"]),
+                Paragraph("models.py", style_map["TableCell"]),
+                Paragraph("MLP, CNN, ViT, patch embeddings", style_map["TableCell"]),
+            ],
+            [
+                Paragraph("Protocol", style_map["TableCell"]),
+                Paragraph("experiments/protocol.py", style_map["TableCell"]),
+                Paragraph("train, validate, and evaluate", style_map["TableCell"]),
+            ],
+            [
+                Paragraph("Runner", style_map["TableCell"]),
+                Paragraph("experiments/compare.py", style_map["TableCell"]),
+                Paragraph("execute all three comparison groups", style_map["TableCell"]),
+            ],
+            [
+                Paragraph("Outputs", style_map["TableCell"]),
+                Paragraph("results/", style_map["TableCell"]),
+                Paragraph("metrics, history, and figures", style_map["TableCell"]),
+            ],
+        ],
+        [31 * mm, 57 * mm, 76 * mm],
+        compact=True,
+    )
+
     abstract = side_note(
         "<i>Abstract.</i> We test whether image classifiers retain accuracy when object "
         "position changes between training and testing. CNN is the strongest baseline "
@@ -1054,7 +1080,7 @@ def build_story(data: dict[str, dict], style_map) -> list:
         *page_heading(
             "DISCUSSION",
             "Conclusions and Reproducibility",
-            "What the controlled comparisons support, and what they do not",
+            "Concise interpretation and an exact reproduction path",
             style_map,
         ),
         section_header("7", "Conclusions", style_map),
@@ -1068,39 +1094,13 @@ def build_story(data: dict[str, dict], style_map) -> list:
             "python -m translated_fashionmnist.experiments.compare --groups all --download",
             style_map["Code"],
         ),
-        Spacer(1, 2 * mm),
+        section_header("10", "Implementation map", style_map),
+        implementation,
+        Spacer(1, 3 * mm),
         side_note(
-            "<b>External record.</b> The teammate repository is retained only as provenance. "
-            "Its reported best values use a different checkpoint-selection procedure, so "
-            "they are not treated as a statistically equivalent baseline.",
+            "<b>Reproduction check.</b> One entry point writes the metric table, run "
+            "manifest, and three comparison figures to stable output paths.",
             style_map,
-        ),
-        section_header("10", "References", style_map),
-        Paragraph(
-            "[1] H. Xiao, K. Rasul, and R. Vollgraf. Fashion-MNIST: a Novel Image "
-            "Dataset for Benchmarking Machine Learning Algorithms. arXiv:1708.07747, 2017.",
-            style_map["Reference"],
-        ),
-        Paragraph(
-            "[2] A. Dosovitskiy et al. An Image is Worth 16x16 Words: Transformers for "
-            "Image Recognition at Scale. ICLR, 2021.",
-            style_map["Reference"],
-        ),
-        Paragraph(
-            "[3] Y. LeCun, L. Bottou, Y. Bengio, and P. Haffner. Gradient-Based Learning "
-            "Applied to Document Recognition. Proceedings of the IEEE, 1998.",
-            style_map["Reference"],
-        ),
-        Paragraph(
-            "[4] I. Loshchilov and F. Hutter. Decoupled Weight Decay Regularization. "
-            "ICLR, 2019.",
-            style_map["Reference"],
-        ),
-        Paragraph(
-            "[5] kicious. translated-fashion-mnist-vit, recorded commit "
-            "943fa7b. "
-            "https://github.com/kicious/translated-fashion-mnist-vit",
-            style_map["Reference"],
         ),
     ]
     return story

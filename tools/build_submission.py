@@ -32,7 +32,7 @@ To reproduce, extract SOURCE_CODE.zip and run:
 
     python -m pip install -r requirements.txt
     python -m unittest discover -s tests -v
-    python -m translated_fashionmnist.comparisons.run --groups all --download
+    python -m translated_fashionmnist.experiments.compare --groups all --download
 
 Datasets, checkpoints, caches, duplicate figures, and per-run folders are
 intentionally excluded.
@@ -40,15 +40,20 @@ intentionally excluded.
 
 SOURCE_README = """# Source code
 
-The baseline and optional comparisons share one package:
+The baseline and controlled comparisons share one package:
 
     translated_fashionmnist/
         data.py
         models.py
         training.py
-        baseline.py
+        utils.py
         visualize.py
-        comparisons/
+        experiments/
+            baseline.py
+            compare.py
+            config.py
+            protocol.py
+            plots.py
 
 Run the tests:
 
@@ -56,7 +61,7 @@ Run the tests:
 
 Run all comparisons:
 
-    python -m translated_fashionmnist.comparisons.run --groups all --download
+    python -m translated_fashionmnist.experiments.compare --groups all --download
 """
 
 

@@ -1,4 +1,4 @@
-"""A compact Vision Transformer for 64x64 grayscale images."""
+"""Classification models for translated 64 x 64 FashionMNIST images."""
 
 from __future__ import annotations
 
@@ -126,6 +126,63 @@ class VisionTransformer(nn.Module):
         tokens = self.embedding_dropout(tokens + self.position_embedding)
         encoded = self.encoder(tokens)
         return self.classifier(encoded[:, 0])
+
+
+class MLPClassifier(nn.Module):
+    """Parameter-scale-matched MLP for 64 x 64 grayscale inputs."""
+
+    def __init__(self, image_size: int = 64, num_classes: int = 10) -> None:
+        super().__init__()
+        input_dim = image_size * image_size
+        hidden_dim = 128
+        self.network = nn.Sequential(
+            nn.Flatten(),
+            nn.Linear(input_dim, hidden_dim),
+            nn.LayerNorm(hidden_dim),
+            nn.GELU(),
+            nn.Dropout(0.1),
+            nn.Linear(hidden_dim, hidden_dim),
+            nn.GELU(),
+            nn.Dropout(0.1),
+            nn.Linear(hidden_dim, num_classes),
+        )
+
+    def forward(self, images: torch.Tensor) -> torch.Tensor:
+        return self.network(images)
+
+
+class CNNClassifier(nn.Module):
+    """Compact CNN with local receptive fields and shared spatial filters."""
+
+    def __init__(self, num_classes: int = 10) -> None:
+        super().__init__()
+        self.features = nn.Sequential(
+            nn.Conv2d(1, 32, kernel_size=3, padding=1),
+            nn.BatchNorm2d(32),
+            nn.GELU(),
+            nn.Conv2d(32, 32, kernel_size=3, padding=1),
+            nn.GELU(),
+            nn.MaxPool2d(2),
+            nn.Conv2d(32, 64, kernel_size=3, padding=1),
+            nn.BatchNorm2d(64),
+            nn.GELU(),
+            nn.Conv2d(64, 64, kernel_size=3, padding=1),
+            nn.GELU(),
+            nn.MaxPool2d(2),
+            nn.Conv2d(64, 128, kernel_size=3, padding=1),
+            nn.GELU(),
+            nn.AdaptiveAvgPool2d((2, 2)),
+        )
+        self.classifier = nn.Sequential(
+            nn.Flatten(),
+            nn.Linear(128 * 2 * 2, 128),
+            nn.GELU(),
+            nn.Dropout(0.1),
+            nn.Linear(128, num_classes),
+        )
+
+    def forward(self, images: torch.Tensor) -> torch.Tensor:
+        return self.classifier(self.features(images))
 
 
 def count_trainable_parameters(model: nn.Module) -> int:

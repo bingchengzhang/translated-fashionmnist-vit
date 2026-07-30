@@ -1,4 +1,4 @@
-"""Run the three optional comparison groups and generate report figures."""
+"""Run the three controlled comparison groups and generate report figures."""
 
 from __future__ import annotations
 
@@ -9,9 +9,8 @@ from pathlib import Path
 
 import torch
 
-from ..common import save_json, write_csv
-
-from .configs import configuration_ids_for_groups
+from ..utils import save_json, write_csv
+from .config import configuration_ids_for_groups
 from .protocol import ProtocolConfig, run_configuration
 from .plots import generate_visualizations
 

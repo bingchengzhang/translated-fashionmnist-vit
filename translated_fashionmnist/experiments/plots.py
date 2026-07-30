@@ -7,7 +7,7 @@ from pathlib import Path
 
 import matplotlib.pyplot as plt
 
-from .configs import EXPERIMENTS, GROUPS
+from .config import EXPERIMENTS, GROUPS
 
 
 SETTING_LABELS = {

@@ -1,4 +1,4 @@
-"""Training and evaluation protocol for the optional comparisons."""
+"""Training and evaluation protocol for the controlled comparisons."""
 
 from __future__ import annotations
 
@@ -14,7 +14,9 @@ from torchvision import datasets as tv_datasets
 from torchvision import transforms
 
 from ..data import TranslatedFashionMNIST
-from ..common import (
+from ..models import CNNClassifier, MLPClassifier, VisionTransformer
+from ..models import count_trainable_parameters
+from ..utils import (
     AverageMeter,
     plot_history,
     resolve_device,
@@ -24,13 +26,12 @@ from ..common import (
     write_csv,
 )
 
-from .configs import (
+from .config import (
     EXPERIMENTS,
     SETTING_ORDER,
     ExperimentDefinition,
     groups_for_configuration,
 )
-from .models import build_model, count_trainable_parameters
 
 
 @dataclass
@@ -52,6 +53,34 @@ class ProtocolConfig:
     limit_train_samples: int = 0
     limit_val_samples: int = 0
     limit_test_samples: int = 0
+
+
+def build_model(
+    definition: ExperimentDefinition,
+    image_size: int = 64,
+    num_classes: int = 10,
+) -> nn.Module:
+    """Construct one architecture while keeping the protocol configuration separate."""
+    if definition.model_type == "mlp":
+        return MLPClassifier(image_size=image_size, num_classes=num_classes)
+    if definition.model_type == "cnn":
+        return CNNClassifier(num_classes=num_classes)
+    if definition.model_type == "vit":
+        if definition.patch_size is None or definition.patch_embedding is None:
+            raise ValueError("ViT definitions require patch size and embedding type.")
+        return VisionTransformer(
+            image_size=image_size,
+            patch_size=definition.patch_size,
+            in_channels=1,
+            num_classes=num_classes,
+            embed_dim=128,
+            depth=4,
+            num_heads=4,
+            mlp_dim=512,
+            dropout=0.1,
+            patch_embedding=definition.patch_embedding,
+        )
+    raise ValueError(f"Unsupported model type: {definition.model_type}")
 
 
 def _limit_dataset(dataset: Dataset, limit: int) -> Dataset:

@@ -4,20 +4,21 @@ import unittest
 
 import torch
 
-from translated_fashionmnist.models import ConvPatchEmbedding, LinearPatchEmbedding
-from translated_fashionmnist.comparisons.configs import (
+from translated_fashionmnist.experiments.config import (
     EXPERIMENTS,
     GROUPS,
     SETTING_ORDER,
     configuration_ids_for_groups,
 )
-from translated_fashionmnist.comparisons.models import (
-    build_model,
+from translated_fashionmnist.experiments.protocol import build_model
+from translated_fashionmnist.models import (
+    ConvPatchEmbedding,
+    LinearPatchEmbedding,
     count_trainable_parameters,
 )
 
 
-class OptionalExperimentTests(unittest.TestCase):
+class ExperimentTests(unittest.TestCase):
     def test_every_model_produces_ten_logits(self):
         images = torch.rand(2, 1, 64, 64)
         for definition in EXPERIMENTS.values():

@@ -1,14 +1,9 @@
 # Translated FashionMNIST
 
-A compact PyTorch project for studying position generalization on FashionMNIST.
-Each 28 x 28 object is placed on a 64 x 64 canvas using one of two distributions:
-
-- **A:** random position
-- **B:** centered position
-
-Models are evaluated on A -> A, B -> B, A -> B, and B -> A. The repository
-contains the original ViT baseline and three optional comparisons in one shared
-Python package.
+Controlled experiments on spatial generalization in image classifiers. A
+FashionMNIST object is placed on a 64 x 64 canvas either at a random location
+(distribution A) or at the center (distribution B). Every model is evaluated
+under A -> A, B -> B, A -> B, and B -> A.
 
 ## Results
 
@@ -21,24 +16,32 @@ Python package.
 | ViT, patch 4 | 75.28 | 87.22 | 74.97 | 17.02 |
 | ViT, Flatten + Linear | 79.67 | 88.80 | 80.48 | 16.30 |
 
-CNN is strongest in all four settings. Patch size 8 is the most balanced ViT
-configuration. Conv2d and Flatten + Linear patch embeddings differ by at most
-0.61 percentage points.
+The CNN is strongest in all four settings. Among the ViTs, patch size 8 gives
+the most balanced result. Conv2d and Flatten + Linear patch embeddings differ
+by no more than 0.61 percentage points.
 
-## Structure
+## Repository layout
 
 ```text
-translated_fashionmnist/   shared data, models, training, and experiments
-results/                    metrics, consolidated history, and three figures
-reports/                    final PDF and reproducible report source
-tests/                      eight dataset, model, and protocol tests
+translated_fashionmnist/
+├── data.py                 translated-canvas dataset
+├── models.py               MLP, CNN, ViT, and patch embeddings
+├── training.py             shared ViT training pipeline
+├── utils.py                reproducibility and file utilities
+├── visualize.py            dataset preview
+└── experiments/
+    ├── baseline.py         original four-setting ViT run
+    ├── compare.py          three controlled comparison groups
+    ├── config.py           experiment definitions
+    ├── protocol.py         common comparison protocol
+    └── plots.py            report figures
+results/                    metrics, training history, and figures
+reports/                    four-page report and its build script
+tests/                      dataset, model, and protocol checks
 tools/                      compact submission builder
 ```
 
-The former `datasets/`, `models/`, `experiments/`, and root-level training
-scripts are unified under `translated_fashionmnist/`.
-
-## Commands
+## Reproduce
 
 Install and test:
 
@@ -47,16 +50,16 @@ python -m pip install -r requirements.txt
 python -m unittest discover -s tests -v
 ```
 
-Run the original four-setting ViT baseline:
+Run the original ViT baseline:
 
 ```bash
-python -m translated_fashionmnist.baseline
+python -m translated_fashionmnist.experiments.baseline
 ```
 
-Run all optional comparisons:
+Run all three comparisons:
 
 ```bash
-python -m translated_fashionmnist.comparisons.run \
+python -m translated_fashionmnist.experiments.compare \
   --groups all \
   --epochs 15 \
   --batch-size 64 \
@@ -71,7 +74,7 @@ python -m translated_fashionmnist.visualize
 ```
 
 Formal runs use seed 42, a fixed 90%/10% training-validation split, and
-validation-based checkpoint selection. The official test set is reserved for
+validation-based checkpoint selection. The official test set is used only for
 final evaluation.
 
 ## Deliverables
@@ -80,14 +83,22 @@ final evaluation.
 - [Result record](results/README.md)
 - [Formal metrics](results/metrics.csv)
 
-Build the four-file teaching-assistant submission:
+Build the compact four-file submission:
 
 ```bash
 python tools/build_submission.py
 ```
 
-## Attribution
+## Provenance
 
-The optional comparisons, training runs, report, and packaging are credited to
-**bc**. The teammate repository is retained only as an external record; details
-are in [CONTRIBUTIONS.md](CONTRIBUTIONS.md).
+bc designed and implemented the comparison protocol, MLP/CNN/ViT study,
+patch-size ablation, patch-embedding ablation, formal runs, visualizations,
+report, and submission package.
+
+The teammate project
+[`kicious/translated-fashion-mnist-vit`](https://github.com/kicious/translated-fashion-mnist-vit)
+is retained only as an external reference. Four published summary values at
+commit `943fa7b68730bc8ea7786bb41c7b8dc1d488883a` are recorded in
+`translated_fashionmnist/experiments/references/teammate_vit.csv`. Its checkpoint
+selection differs from this study, so those values are not used as a controlled
+baseline.

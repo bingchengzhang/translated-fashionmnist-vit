@@ -1,7 +1,7 @@
-# Comparison experiments
+# Experiments
 
-This module implements the optional comparison study without modifying the
-teammate repository.
+This subpackage contains the four-setting ViT baseline and the three controlled
+comparison groups.
 
 ## Experiment groups
 
@@ -26,7 +26,7 @@ both test distributions.
 ## Run
 
 ```bash
-python -m translated_fashionmnist.comparisons.run \
+python -m translated_fashionmnist.experiments.compare \
   --groups all \
   --epochs 15 \
   --batch-size 64 \
@@ -37,7 +37,7 @@ python -m translated_fashionmnist.comparisons.run \
 For a quick pipeline check:
 
 ```bash
-python -m translated_fashionmnist.comparisons.run \
+python -m translated_fashionmnist.experiments.compare \
   --groups all \
   --epochs 1 \
   --limit-train-samples 512 \

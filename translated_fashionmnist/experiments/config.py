@@ -1,4 +1,4 @@
-"""Experiment definitions shared by the runner and visualizations."""
+"""Experiment definitions shared by the runners and visualizations."""
 
 from __future__ import annotations
 

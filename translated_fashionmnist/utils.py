@@ -1,4 +1,4 @@
-"""Shared experiment utilities."""
+"""Shared training, serialization, and reproducibility utilities."""
 
 from __future__ import annotations
 

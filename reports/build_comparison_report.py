@@ -103,8 +103,8 @@ def build_styles() -> dict[str, ParagraphStyle]:
             "Kicker",
             parent=base["Normal"],
             fontName="SourceSans-Semibold",
-            fontSize=7.5,
-            leading=9,
+            fontSize=8.3,
+            leading=10,
             tracking=0.8,
             textColor=ACCENT,
             spaceAfter=4.5 * mm,
@@ -113,8 +113,8 @@ def build_styles() -> dict[str, ParagraphStyle]:
             "Title",
             parent=base["Title"],
             fontName="SourceSerif-Semibold",
-            fontSize=25.5,
-            leading=28.5,
+            fontSize=28,
+            leading=31,
             textColor=INK,
             alignment=TA_LEFT,
             spaceAfter=2.4 * mm,
@@ -123,8 +123,8 @@ def build_styles() -> dict[str, ParagraphStyle]:
             "PageTitle",
             parent=base["Title"],
             fontName="SourceSerif-Semibold",
-            fontSize=24,
-            leading=27,
+            fontSize=26.5,
+            leading=29.5,
             textColor=INK,
             alignment=TA_LEFT,
             spaceAfter=2.2 * mm,
@@ -133,8 +133,8 @@ def build_styles() -> dict[str, ParagraphStyle]:
             "Subtitle",
             parent=base["Normal"],
             fontName="SourceSans",
-            fontSize=10.2,
-            leading=13.2,
+            fontSize=11,
+            leading=14.5,
             textColor=MUTED,
             spaceAfter=4 * mm,
         ),
@@ -142,16 +142,16 @@ def build_styles() -> dict[str, ParagraphStyle]:
             "Meta",
             parent=base["Normal"],
             fontName="SourceSans",
-            fontSize=7.6,
-            leading=10,
+            fontSize=8.3,
+            leading=10.8,
             textColor=MUTED,
         ),
         "AbstractLabel": ParagraphStyle(
             "AbstractLabel",
             parent=base["Normal"],
             fontName="SourceSerif-Italic",
-            fontSize=9.3,
-            leading=12,
+            fontSize=10.1,
+            leading=13,
             textColor=NAVY,
             spaceAfter=1.1 * mm,
         ),
@@ -159,8 +159,8 @@ def build_styles() -> dict[str, ParagraphStyle]:
             "Body",
             parent=base["BodyText"],
             fontName="SourceSerif",
-            fontSize=9.35,
-            leading=13.5,
+            fontSize=10.25,
+            leading=14.8,
             textColor=INK,
             spaceAfter=2.2 * mm,
         ),
@@ -168,24 +168,24 @@ def build_styles() -> dict[str, ParagraphStyle]:
             "BodySmall",
             parent=base["BodyText"],
             fontName="SourceSerif",
-            fontSize=8.5,
-            leading=11.8,
+            fontSize=9.25,
+            leading=12.9,
             textColor=INK,
         ),
         "SansSmall": ParagraphStyle(
             "SansSmall",
             parent=base["Normal"],
             fontName="SourceSans",
-            fontSize=7.6,
-            leading=10.2,
+            fontSize=8.25,
+            leading=10.8,
             textColor=MUTED,
         ),
         "SansSmallCenter": ParagraphStyle(
             "SansSmallCenter",
             parent=base["Normal"],
             fontName="SourceSans",
-            fontSize=7.6,
-            leading=10.2,
+            fontSize=8.25,
+            leading=10.8,
             alignment=TA_CENTER,
             textColor=MUTED,
         ),
@@ -193,8 +193,8 @@ def build_styles() -> dict[str, ParagraphStyle]:
             "MiniTitle",
             parent=base["Normal"],
             fontName="SourceSans-Semibold",
-            fontSize=9.2,
-            leading=11.5,
+            fontSize=10,
+            leading=12.4,
             textColor=NAVY,
             spaceAfter=1.4 * mm,
         ),
@@ -202,24 +202,24 @@ def build_styles() -> dict[str, ParagraphStyle]:
             "TableHeader",
             parent=base["Normal"],
             fontName="SourceSans-Semibold",
-            fontSize=7.5,
-            leading=9.4,
+            fontSize=8.2,
+            leading=10.3,
             textColor=NAVY,
         ),
         "TableCell": ParagraphStyle(
             "TableCell",
             parent=base["Normal"],
             fontName="SourceSans",
-            fontSize=7.45,
-            leading=9.4,
+            fontSize=8.15,
+            leading=10.3,
             textColor=INK,
         ),
         "TableCellCenter": ParagraphStyle(
             "TableCellCenter",
             parent=base["Normal"],
             fontName="SourceSans",
-            fontSize=7.45,
-            leading=9.4,
+            fontSize=8.15,
+            leading=10.3,
             alignment=TA_CENTER,
             textColor=INK,
         ),
@@ -227,8 +227,8 @@ def build_styles() -> dict[str, ParagraphStyle]:
             "TableCellStrong",
             parent=base["Normal"],
             fontName="SourceSans-Semibold",
-            fontSize=7.45,
-            leading=9.4,
+            fontSize=8.15,
+            leading=10.3,
             alignment=TA_CENTER,
             textColor=NAVY,
         ),
@@ -236,8 +236,8 @@ def build_styles() -> dict[str, ParagraphStyle]:
             "Caption",
             parent=base["Normal"],
             fontName="SourceSans",
-            fontSize=7.15,
-            leading=9.5,
+            fontSize=8,
+            leading=10.5,
             textColor=MUTED,
             alignment=TA_CENTER,
             spaceAfter=2.4 * mm,
@@ -246,16 +246,16 @@ def build_styles() -> dict[str, ParagraphStyle]:
             "Callout",
             parent=base["BodyText"],
             fontName="SourceSerif",
-            fontSize=9.05,
-            leading=12.9,
+            fontSize=9.8,
+            leading=14,
             textColor=INK,
         ),
         "FindingLabel": ParagraphStyle(
             "FindingLabel",
             parent=base["Normal"],
             fontName="SourceSans-Semibold",
-            fontSize=7.2,
-            leading=8.7,
+            fontSize=7.9,
+            leading=9.6,
             textColor=ACCENT,
             alignment=TA_CENTER,
         ),
@@ -263,8 +263,8 @@ def build_styles() -> dict[str, ParagraphStyle]:
             "FindingValue",
             parent=base["Normal"],
             fontName="SourceSerif-Semibold",
-            fontSize=13.5,
-            leading=15.5,
+            fontSize=15,
+            leading=17,
             textColor=INK,
             alignment=TA_CENTER,
         ),
@@ -272,8 +272,8 @@ def build_styles() -> dict[str, ParagraphStyle]:
             "FindingText",
             parent=base["Normal"],
             fontName="SourceSans",
-            fontSize=7.2,
-            leading=9.3,
+            fontSize=7.9,
+            leading=10.1,
             textColor=MUTED,
             alignment=TA_CENTER,
         ),
@@ -281,8 +281,8 @@ def build_styles() -> dict[str, ParagraphStyle]:
             "Bullet",
             parent=base["BodyText"],
             fontName="SourceSerif",
-            fontSize=8.5,
-            leading=11.8,
+            fontSize=9.25,
+            leading=12.9,
             textColor=INK,
             leftIndent=3.5 * mm,
             firstLineIndent=-2.5 * mm,
@@ -292,8 +292,8 @@ def build_styles() -> dict[str, ParagraphStyle]:
             "Reference",
             parent=base["BodyText"],
             fontName="SourceSerif",
-            fontSize=7.15,
-            leading=9.6,
+            fontSize=7.8,
+            leading=10.5,
             textColor=INK,
             leftIndent=4 * mm,
             firstLineIndent=-4 * mm,
@@ -303,8 +303,8 @@ def build_styles() -> dict[str, ParagraphStyle]:
             "Code",
             parent=base["Code"],
             fontName="Courier",
-            fontSize=6.9,
-            leading=9.5,
+            fontSize=7.5,
+            leading=10.2,
             textColor=INK,
         ),
     }
@@ -317,8 +317,8 @@ class ReportDocument(BaseDocTemplate):
             pagesize=A4,
             leftMargin=23 * mm,
             rightMargin=23 * mm,
-            topMargin=19 * mm,
-            bottomMargin=18 * mm,
+            topMargin=18 * mm,
+            bottomMargin=17 * mm,
             title="Position Generalization in Translated FashionMNIST",
             author="",
             subject="Architecture, patch scale, and patch embedding comparisons",
@@ -341,7 +341,7 @@ class ReportDocument(BaseDocTemplate):
         canvas.setStrokeColor(RULE)
         canvas.setLineWidth(0.45)
         canvas.line(23 * mm, 13 * mm, A4[0] - 23 * mm, 13 * mm)
-        canvas.setFont("SourceSans", 7)
+        canvas.setFont("SourceSans", 7.5)
         canvas.setFillColor(MUTED)
         canvas.drawString(23 * mm, 8.5 * mm, "TRANSLATED FASHIONMNIST COMPARISON STUDY")
         canvas.drawRightString(A4[0] - 23 * mm, 8.5 * mm, f"{document.page}")
@@ -362,13 +362,13 @@ def section_header(number: str, title: str, style_map) -> Table:
                 ("LINEBELOW", (0, 0), (-1, -1), 0.55, RULE),
             ]
         ),
-        spaceBefore=3.7 * mm,
-        spaceAfter=2.1 * mm,
+        spaceBefore=4.2 * mm,
+        spaceAfter=2.4 * mm,
     )
 
 
 def ruled_table(rows, widths, *, header=True, compact=False) -> Table:
-    line_height = 4 if compact else 4.7
+    line_height = 4.8 if compact else 5.5
     commands = [
         ("BACKGROUND", (0, 0), (-1, 0), PALE),
         ("LINEABOVE", (0, 0), (-1, 0), 0.65, NAVY),
@@ -412,7 +412,7 @@ def chart_block(drawing: Drawing, caption: str, style_map) -> KeepTogether:
 
 
 def add_axes(
-    drawing: Drawing, *, maximum: float, steps: int, title: str, height: float = 105
+    drawing: Drawing, *, maximum: float, steps: int, title: str, height: float = 120
 ) -> tuple[float, float, float, float]:
     left, bottom, width = 39, 29, 386
     drawing.add(
@@ -421,7 +421,7 @@ def add_axes(
             height + 49,
             title,
             fontName="SourceSans-Semibold",
-            fontSize=8.7,
+            fontSize=9.6,
             fillColor=NAVY,
         )
     )
@@ -435,7 +435,7 @@ def add_axes(
                 y - 2.2,
                 f"{value:.0f}",
                 fontName="SourceSans",
-                fontSize=6.3,
+                fontSize=7,
                 fillColor=MUTED,
                 textAnchor="end",
             )
@@ -445,7 +445,7 @@ def add_axes(
 
 
 def make_hard_transfer_chart(data: dict[str, dict]) -> Drawing:
-    drawing = Drawing(465, 165)
+    drawing = Drawing(465, 185)
     left, bottom, width, height = add_axes(
         drawing,
         maximum=45,
@@ -476,7 +476,7 @@ def make_hard_transfer_chart(data: dict[str, dict]) -> Drawing:
                 bottom + bar_height + 5,
                 f"{value:.1f}%",
                 fontName="SourceSans-Semibold",
-                fontSize=7.3,
+                fontSize=8,
                 fillColor=INK,
                 textAnchor="middle",
             )
@@ -487,7 +487,7 @@ def make_hard_transfer_chart(data: dict[str, dict]) -> Drawing:
                 bottom - 12,
                 label,
                 fontName="SourceSans",
-                fontSize=7,
+                fontSize=7.8,
                 fillColor=INK,
                 textAnchor="middle",
             )
@@ -496,7 +496,7 @@ def make_hard_transfer_chart(data: dict[str, dict]) -> Drawing:
 
 
 def make_shift_chart(data: dict[str, dict]) -> Drawing:
-    drawing = Drawing(465, 165)
+    drawing = Drawing(465, 185)
     left, bottom, width, height = add_axes(
         drawing,
         maximum=100,
@@ -534,7 +534,7 @@ def make_shift_chart(data: dict[str, dict]) -> Drawing:
                 bottom + height * values[0] / 100 + 5,
                 f"-{drop:.1f} pp",
                 fontName="SourceSans-Semibold",
-                fontSize=6.7,
+                fontSize=7.4,
                 fillColor=INK,
                 textAnchor="middle",
             )
@@ -545,20 +545,20 @@ def make_shift_chart(data: dict[str, dict]) -> Drawing:
                 bottom - 12,
                 label,
                 fontName="SourceSans",
-                fontSize=7,
+                fontSize=7.8,
                 fillColor=INK,
                 textAnchor="middle",
             )
         )
-    drawing.add(Rect(329, 151, 8, 5, fillColor=BLUE, strokeColor=None))
-    drawing.add(String(341, 150, "B -> B", fontName="SourceSans", fontSize=6.5, fillColor=MUTED))
-    drawing.add(Rect(382, 151, 8, 5, fillColor=ORANGE, strokeColor=None))
-    drawing.add(String(394, 150, "B -> A", fontName="SourceSans", fontSize=6.5, fillColor=MUTED))
+    drawing.add(Rect(329, 171, 8, 5, fillColor=BLUE, strokeColor=None))
+    drawing.add(String(341, 170, "B -> B", fontName="SourceSans", fontSize=7.2, fillColor=MUTED))
+    drawing.add(Rect(382, 171, 8, 5, fillColor=ORANGE, strokeColor=None))
+    drawing.add(String(394, 170, "B -> A", fontName="SourceSans", fontSize=7.2, fillColor=MUTED))
     return drawing
 
 
 def make_patch_chart(data: dict[str, dict]) -> Drawing:
-    drawing = Drawing(465, 165)
+    drawing = Drawing(465, 185)
     left, bottom, width, height = add_axes(
         drawing,
         maximum=100,
@@ -595,7 +595,7 @@ def make_patch_chart(data: dict[str, dict]) -> Drawing:
                     bottom + bar_height + 4,
                     f"{value:.1f}",
                     fontName="SourceSans",
-                    fontSize=6.7,
+                    fontSize=7.4,
                     fillColor=INK,
                     textAnchor="middle",
                 )
@@ -606,15 +606,15 @@ def make_patch_chart(data: dict[str, dict]) -> Drawing:
                 bottom - 12,
                 label,
                 fontName="SourceSans",
-                fontSize=7,
+                fontSize=7.8,
                 fillColor=INK,
                 textAnchor="middle",
             )
         )
-    drawing.add(Rect(329, 151, 8, 5, fillColor=BLUE, strokeColor=None))
-    drawing.add(String(341, 150, "A -> A", fontName="SourceSans", fontSize=6.5, fillColor=MUTED))
-    drawing.add(Rect(382, 151, 8, 5, fillColor=ORANGE, strokeColor=None))
-    drawing.add(String(394, 150, "B -> A", fontName="SourceSans", fontSize=6.5, fillColor=MUTED))
+    drawing.add(Rect(329, 171, 8, 5, fillColor=BLUE, strokeColor=None))
+    drawing.add(String(341, 170, "A -> A", fontName="SourceSans", fontSize=7.2, fillColor=MUTED))
+    drawing.add(Rect(382, 171, 8, 5, fillColor=ORANGE, strokeColor=None))
+    drawing.add(String(394, 170, "B -> A", fontName="SourceSans", fontSize=7.2, fillColor=MUTED))
     return drawing
 
 
@@ -905,7 +905,7 @@ def build_story(data: dict[str, dict], style_map) -> list:
             ],
             [
                 Paragraph("Code", style_map["TableCell"]),
-                Paragraph("translated_fashionmnist/comparisons", style_map["TableCell"]),
+                Paragraph("translated_fashionmnist/experiments", style_map["TableCell"]),
             ],
             [
                 Paragraph("Metrics", style_map["TableCell"]),
@@ -1065,7 +1065,7 @@ def build_story(data: dict[str, dict], style_map) -> list:
         reproducibility,
         Spacer(1, 2 * mm),
         Paragraph(
-            "python -m translated_fashionmnist.comparisons.run --groups all --download",
+            "python -m translated_fashionmnist.experiments.compare --groups all --download",
             style_map["Code"],
         ),
         Spacer(1, 2 * mm),

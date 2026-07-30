@@ -25,6 +25,7 @@ by no more than 0.61 percentage points.
 ```text
 translated_fashionmnist/
 ├── data.py                 translated-canvas dataset
+├── engine.py               shared training and evaluation loop
 ├── models.py               MLP, CNN, ViT, and patch embeddings
 ├── training.py             shared ViT training pipeline
 ├── utils.py                reproducibility and file utilities
@@ -49,6 +50,9 @@ Install and test:
 python -m pip install -r requirements.txt
 python -m unittest discover -s tests -v
 ```
+
+Use `requirements-lock.txt` to recreate the recorded Python 3.12 package
+versions.
 
 Run the original ViT baseline:
 
@@ -94,11 +98,3 @@ python tools/build_submission.py
 bc designed and implemented the comparison protocol, MLP/CNN/ViT study,
 patch-size ablation, patch-embedding ablation, formal runs, visualizations,
 report, and submission package.
-
-The teammate project
-[`kicious/translated-fashion-mnist-vit`](https://github.com/kicious/translated-fashion-mnist-vit)
-is retained only as an external reference. Four published summary values at
-commit `943fa7b68730bc8ea7786bb41c7b8dc1d488883a` are recorded in
-`translated_fashionmnist/experiments/references/teammate_vit.csv`. Its checkpoint
-selection differs from this study, so those values are not used as a controlled
-baseline.

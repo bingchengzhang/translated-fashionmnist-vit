@@ -43,7 +43,9 @@ class TranslatedFashionMNIST(Dataset):
         self.seed = int(seed)
         self.return_position = return_position
         self.resample_each_epoch = resample_each_epoch
-        self.epoch = 0
+        # A shared tensor keeps persistent DataLoader workers synchronized when
+        # the training loop advances the epoch.
+        self._epoch = torch.zeros((), dtype=torch.int64).share_memory_()
 
         if self.canvas_size < 28:
             raise ValueError("canvas_size must be at least 28 for FashionMNIST.")
@@ -53,7 +55,14 @@ class TranslatedFashionMNIST(Dataset):
 
     def set_epoch(self, epoch: int) -> None:
         """Set the epoch used by optional per-epoch position resampling."""
-        self.epoch = int(epoch)
+        epoch = int(epoch)
+        if epoch < 0:
+            raise ValueError("epoch cannot be negative.")
+        self._epoch.fill_(epoch)
+
+    @property
+    def epoch(self) -> int:
+        return int(self._epoch.item())
 
     def _random_position(self, index: int, height: int, width: int) -> tuple[int, int]:
         epoch = self.epoch if self.resample_each_epoch else 0

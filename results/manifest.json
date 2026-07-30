@@ -33,7 +33,11 @@
   "environment": {
     "python": "3.12.13",
     "torch": "2.11.0+cu128",
+    "torchvision": "0.26.0+cu128",
+    "numpy": "2.4.4",
     "cuda": "12.8",
-    "gpu": "NVIDIA GeForce RTX 5070 Laptop GPU"
+    "gpu": "NVIDIA GeForce RTX 5070 Laptop GPU",
+    "platform": "Linux (WSL2)",
+    "determinism": "seeded; deterministic algorithms disabled"
   }
 }

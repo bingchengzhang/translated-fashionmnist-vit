@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import csv
 import io
 import zipfile
 from pathlib import Path
@@ -16,7 +17,7 @@ METRICS_SOURCE = ROOT / "results" / "metrics.csv"
 
 SUBMISSION_README = """# Submission guide
 
-This archive contains the optional comparison study only.
+This archive contains the controlled comparison study.
 
 Read the files in this order:
 
@@ -30,7 +31,7 @@ validation-based checkpoint selection.
 
 To reproduce, extract SOURCE_CODE.zip and run:
 
-    python -m pip install -r requirements.txt
+    python -m pip install -r requirements-lock.txt
     python -m unittest discover -s tests -v
     python -m translated_fashionmnist.experiments.compare --groups all --download
 
@@ -46,6 +47,7 @@ The baseline and controlled comparisons share one package:
         data.py
         models.py
         training.py
+        engine.py
         utils.py
         visualize.py
         experiments/
@@ -69,9 +71,10 @@ def code_files() -> list[tuple[Path, Path]]:
     """Return files for the nested modular source archive."""
     files: list[tuple[Path, Path]] = [
         (ROOT / "requirements.txt", Path("requirements.txt")),
+        (ROOT / "requirements-lock.txt", Path("requirements-lock.txt")),
     ]
     for path in sorted((ROOT / "translated_fashionmnist").rglob("*")):
-        if path.is_file() and path.suffix in {".py", ".csv"}:
+        if path.is_file() and path.suffix == ".py":
             files.append((path, path.relative_to(ROOT)))
     for path in sorted((ROOT / "tests").glob("*.py")):
         files.append((path, path.relative_to(ROOT)))
@@ -91,6 +94,32 @@ def validate_sources(files: list[tuple[Path, Path]]) -> None:
             raise ValueError(f"Forbidden file type in package: {relative}")
 
 
+def validate_metrics(path: Path) -> None:
+    """Require one complete 4-setting record for every formal configuration."""
+    with path.open(newline="", encoding="utf-8") as file:
+        rows = list(csv.DictReader(file))
+    required = {"config_id", "train_mode", "test_mode", "test_accuracy"}
+    if not rows or not required.issubset(rows[0]):
+        raise ValueError("Metrics file is empty or missing required columns.")
+    keys = {
+        (row["config_id"], row["train_mode"], row["test_mode"])
+        for row in rows
+    }
+    configurations = {row["config_id"] for row in rows}
+    expected_settings = {("A", "A"), ("B", "B"), ("A", "B"), ("B", "A")}
+    complete = all(
+        {
+            (row["train_mode"], row["test_mode"])
+            for row in rows
+            if row["config_id"] == config_id
+        }
+        == expected_settings
+        for config_id in configurations
+    )
+    if len(rows) != 24 or len(keys) != 24 or len(configurations) != 6 or not complete:
+        raise ValueError("Expected 24 unique formal measurements.")
+
+
 def build_source_archive(files: list[tuple[Path, Path]]) -> bytes:
     buffer = io.BytesIO()
     with zipfile.ZipFile(buffer, "w", compression=zipfile.ZIP_DEFLATED) as archive:
@@ -106,6 +135,7 @@ def build_archive(output_path: Path) -> Path:
     for path in (REPORT_SOURCE, METRICS_SOURCE):
         if not path.is_file():
             raise FileNotFoundError(f"Missing submission source: {path}")
+    validate_metrics(METRICS_SOURCE)
 
     output_path = output_path.resolve()
     output_path.parent.mkdir(parents=True, exist_ok=True)

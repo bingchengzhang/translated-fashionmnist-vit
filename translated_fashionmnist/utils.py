@@ -4,13 +4,15 @@ from __future__ import annotations
 
 import csv
 import json
-import os
+import platform
 import random
+import sys
 from pathlib import Path
 from typing import Any, Iterable
 
 import numpy as np
 import torch
+import torchvision
 
 
 class AverageMeter:
@@ -146,8 +148,11 @@ def serializable_config(namespace: object) -> dict[str, Any]:
 
 def system_summary(device: torch.device) -> dict[str, Any]:
     summary: dict[str, Any] = {
-        "python_pid": os.getpid(),
+        "python": sys.version.split()[0],
         "torch_version": torch.__version__,
+        "torchvision_version": torchvision.__version__,
+        "numpy_version": np.__version__,
+        "platform": platform.platform(),
         "device": str(device),
     }
     if device.type == "cuda":

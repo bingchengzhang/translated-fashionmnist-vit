@@ -4,9 +4,10 @@ import unittest
 
 import torch
 from torch import nn
-from torch.utils.data import Dataset
+from torch.utils.data import DataLoader, Dataset, TensorDataset
 
 from translated_fashionmnist import TranslatedFashionMNIST, VisionTransformer
+from translated_fashionmnist.engine import evaluate, train_epoch
 
 
 class DummyFashionMNIST(Dataset):
@@ -52,6 +53,38 @@ class DatasetTests(unittest.TestCase):
         _, _, position = dataset[0]
         self.assertEqual(position.tolist(), [18, 18])
 
+    def test_epoch_resampling_reaches_persistent_worker(self):
+        dataset = TranslatedFashionMNIST(
+            DummyFashionMNIST(),
+            canvas_size=64,
+            mode="A",
+            seed=7,
+            return_position=True,
+            resample_each_epoch=True,
+        )
+        loader = DataLoader(
+            dataset,
+            batch_size=len(dataset),
+            shuffle=False,
+            num_workers=1,
+            persistent_workers=True,
+            multiprocessing_context="spawn",
+        )
+        try:
+            dataset.set_epoch(0)
+            first_positions = next(iter(loader))[2]
+            dataset.set_epoch(1)
+            second_positions = next(iter(loader))[2]
+            self.assertFalse(torch.equal(first_positions, second_positions))
+        finally:
+            if loader._iterator is not None:
+                loader._iterator._shutdown_workers()
+
+    def test_negative_epoch_is_rejected(self):
+        dataset = TranslatedFashionMNIST(DummyFashionMNIST())
+        with self.assertRaises(ValueError):
+            dataset.set_epoch(-1)
+
 
 class ModelTests(unittest.TestCase):
     def test_forward_and_backward(self):
@@ -84,6 +117,33 @@ class ModelTests(unittest.TestCase):
         )
         logits = model(torch.rand(2, 1, 64, 64))
         self.assertEqual(tuple(logits.shape), (2, 10))
+
+
+class EngineTests(unittest.TestCase):
+    def test_shared_train_and_evaluate_loop(self):
+        images = torch.rand(8, 1, 4, 4)
+        labels = torch.arange(8) % 2
+        loader = DataLoader(TensorDataset(images, labels), batch_size=4)
+        model = nn.Sequential(nn.Flatten(), nn.Linear(16, 2))
+        criterion = nn.CrossEntropyLoss()
+        optimizer = torch.optim.SGD(model.parameters(), lr=0.1)
+        scaler = torch.amp.GradScaler("cuda", enabled=False)
+        device = torch.device("cpu")
+
+        train_metrics = train_epoch(
+            model,
+            loader,
+            criterion,
+            optimizer,
+            scaler,
+            device,
+            amp_enabled=False,
+        )
+        eval_metrics = evaluate(model, loader, criterion, device)
+        for metrics in (train_metrics, eval_metrics):
+            self.assertGreaterEqual(metrics["accuracy"], 0)
+            self.assertLessEqual(metrics["accuracy"], 1)
+            self.assertGreater(metrics["loss"], 0)
 
 
 if __name__ == "__main__":

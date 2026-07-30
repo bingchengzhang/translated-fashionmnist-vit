@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import pickle
 import time
 from dataclasses import asdict, dataclass
 from pathlib import Path
@@ -14,10 +15,10 @@ from torchvision import datasets as tv_datasets
 from torchvision import transforms
 
 from ..data import TranslatedFashionMNIST
+from ..engine import evaluate, limit_dataset, train_epoch, validate_training_settings
 from ..models import CNNClassifier, MLPClassifier, VisionTransformer
 from ..models import count_trainable_parameters
 from ..utils import (
-    AverageMeter,
     plot_history,
     resolve_device,
     save_json,
@@ -54,6 +55,9 @@ class ProtocolConfig:
     limit_val_samples: int = 0
     limit_test_samples: int = 0
 
+    def __post_init__(self) -> None:
+        validate_training_settings(self)
+
 
 def build_model(
     definition: ExperimentDefinition,
@@ -83,12 +87,6 @@ def build_model(
     raise ValueError(f"Unsupported model type: {definition.model_type}")
 
 
-def _limit_dataset(dataset: Dataset, limit: int) -> Dataset:
-    if limit <= 0 or limit >= len(dataset):
-        return dataset
-    return Subset(dataset, range(limit))
-
-
 def _base_datasets(config: ProtocolConfig):
     transform = transforms.ToTensor()
     train = tv_datasets.FashionMNIST(
@@ -112,8 +110,8 @@ def _split_train_validation(base_train: Dataset, config: ProtocolConfig):
     order = torch.randperm(len(base_train), generator=generator).tolist()
     val_indices = order[:val_size]
     train_indices = order[val_size:]
-    train_subset = _limit_dataset(Subset(base_train, train_indices), config.limit_train_samples)
-    val_subset = _limit_dataset(Subset(base_train, val_indices), config.limit_val_samples)
+    train_subset = limit_dataset(Subset(base_train, train_indices), config.limit_train_samples)
+    val_subset = limit_dataset(Subset(base_train, val_indices), config.limit_val_samples)
     return train_subset, val_subset
 
 
@@ -168,7 +166,7 @@ def create_test_loader(
     device: torch.device,
 ) -> DataLoader:
     _, base_test = _base_datasets(config)
-    base_test = _limit_dataset(base_test, config.limit_test_samples)
+    base_test = limit_dataset(base_test, config.limit_test_samples)
     test_dataset = TranslatedFashionMNIST(
         base_test,
         canvas_size=config.canvas_size,
@@ -176,64 +174,6 @@ def create_test_loader(
         seed=config.seed + 303,
     )
     return _loader(test_dataset, config, device, shuffle=False, seed_offset=13)
-
-
-def _train_epoch(
-    model: nn.Module,
-    loader: DataLoader,
-    criterion: nn.Module,
-    optimizer: torch.optim.Optimizer,
-    scaler: torch.amp.GradScaler,
-    device: torch.device,
-    amp_enabled: bool,
-) -> dict[str, float]:
-    model.train()
-    loss_meter = AverageMeter()
-    correct = 0
-    total = 0
-    for images, labels in loader:
-        images = images.to(device, non_blocking=True)
-        labels = labels.to(device, non_blocking=True)
-        optimizer.zero_grad(set_to_none=True)
-        with torch.autocast(
-            device_type=device.type,
-            dtype=torch.float16,
-            enabled=amp_enabled,
-        ):
-            logits = model(images)
-            loss = criterion(logits, labels)
-        scaler.scale(loss).backward()
-        scaler.step(optimizer)
-        scaler.update()
-
-        batch_size = labels.shape[0]
-        loss_meter.update(loss.item(), batch_size)
-        correct += (logits.argmax(dim=1) == labels).sum().item()
-        total += batch_size
-    return {"loss": loss_meter.average, "accuracy": correct / total}
-
-
-@torch.no_grad()
-def evaluate(
-    model: nn.Module,
-    loader: DataLoader,
-    criterion: nn.Module,
-    device: torch.device,
-) -> dict[str, float]:
-    model.eval()
-    loss_meter = AverageMeter()
-    correct = 0
-    total = 0
-    for images, labels in loader:
-        images = images.to(device, non_blocking=True)
-        labels = labels.to(device, non_blocking=True)
-        logits = model(images)
-        loss = criterion(logits, labels)
-        batch_size = labels.shape[0]
-        loss_meter.update(loss.item(), batch_size)
-        correct += (logits.argmax(dim=1) == labels).sum().item()
-        total += batch_size
-    return {"loss": loss_meter.average, "accuracy": correct / total}
 
 
 def _expected_metadata(
@@ -251,11 +191,21 @@ def _expected_metadata(
 def _can_resume(run_dir: Path, expected_metadata: dict) -> bool:
     metadata_path = run_dir / "metadata.json"
     checkpoint_path = run_dir / "best.pt"
-    if not metadata_path.exists() or not checkpoint_path.exists():
+    result_path = run_dir / "training_result.json"
+    if not all(path.is_file() for path in (metadata_path, checkpoint_path, result_path)):
         return False
     try:
         existing = json.loads(metadata_path.read_text(encoding="utf-8"))
+        result = json.loads(result_path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
+        return False
+    required_result_keys = {
+        "best_epoch",
+        "best_val_accuracy",
+        "elapsed_seconds",
+        "parameter_count",
+    }
+    if not required_result_keys.issubset(result):
         return False
     existing_experiment = existing.get("experiment", {})
     existing_protocol = dict(existing_experiment.get("protocol", {}))
@@ -289,20 +239,34 @@ def fit_model(
     checkpoint_path = run_dir / "best.pt"
 
     if resume and _can_resume(run_dir, expected_metadata):
-        checkpoint = torch.load(
-            checkpoint_path,
-            map_location=device,
-            weights_only=False,
-        )
-        model.load_state_dict(checkpoint["model_state"])
-        result = json.loads((run_dir / "training_result.json").read_text(encoding="utf-8"))
-        result["checkpoint"] = str(checkpoint_path)
-        save_json(result, run_dir / "training_result.json")
-        metadata = json.loads((run_dir / "metadata.json").read_text(encoding="utf-8"))
-        metadata["experiment"] = expected_metadata
-        save_json(metadata, run_dir / "metadata.json")
-        print(f"Reusing {definition.config_id}, train {train_mode}")
-        return model, device, criterion, result
+        try:
+            checkpoint = torch.load(
+                checkpoint_path,
+                map_location=device,
+                weights_only=False,
+            )
+            model.load_state_dict(checkpoint["model_state"])
+            result = json.loads(
+                (run_dir / "training_result.json").read_text(encoding="utf-8")
+            )
+        except (
+            OSError,
+            RuntimeError,
+            KeyError,
+            EOFError,
+            ValueError,
+            pickle.UnpicklingError,
+            json.JSONDecodeError,
+        ) as error:
+            print(f"Ignoring incomplete cached run: {error}")
+        else:
+            result["checkpoint"] = str(checkpoint_path)
+            save_json(result, run_dir / "training_result.json")
+            metadata = json.loads((run_dir / "metadata.json").read_text(encoding="utf-8"))
+            metadata["experiment"] = expected_metadata
+            save_json(metadata, run_dir / "metadata.json")
+            print(f"Reusing {definition.config_id}, train {train_mode}")
+            return model, device, criterion, result
 
     train_loader, val_loader = create_train_validation_loaders(
         config,
@@ -342,7 +306,7 @@ def fit_model(
         f"{parameter_count:,} parameters | {device}"
     )
     for epoch in range(1, config.epochs + 1):
-        train_metrics = _train_epoch(
+        train_metrics = train_epoch(
             model,
             train_loader,
             criterion,

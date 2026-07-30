@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import json
+import tempfile
 import unittest
+from pathlib import Path
 
 import torch
 
@@ -10,7 +13,12 @@ from translated_fashionmnist.experiments.config import (
     SETTING_ORDER,
     configuration_ids_for_groups,
 )
-from translated_fashionmnist.experiments.protocol import build_model
+from translated_fashionmnist.experiments.protocol import (
+    ProtocolConfig,
+    _can_resume,
+    _expected_metadata,
+    build_model,
+)
 from translated_fashionmnist.models import (
     ConvPatchEmbedding,
     LinearPatchEmbedding,
@@ -34,6 +42,7 @@ class ExperimentTests(unittest.TestCase):
         self.assertEqual(selected, list(EXPERIMENTS))
         for members in GROUPS.values():
             self.assertTrue(set(members).issubset(EXPERIMENTS))
+        self.assertEqual(GROUPS["model"], ("mlp", "cnn", "vit_p8_conv"))
 
     def test_setting_order_matches_assignment(self):
         self.assertEqual(
@@ -55,6 +64,45 @@ class ExperimentTests(unittest.TestCase):
         self.assertTrue(
             torch.allclose(conv(images), linear(images), atol=1e-6, rtol=1e-5)
         )
+
+    def test_invalid_protocol_values_are_rejected(self):
+        with self.assertRaises(ValueError):
+            ProtocolConfig(epochs=0)
+        with self.assertRaises(ValueError):
+            ProtocolConfig(val_fraction=1.0)
+        with self.assertRaises(ValueError):
+            ProtocolConfig(limit_test_samples=-1)
+
+    def test_resume_requires_complete_result_record(self):
+        config = ProtocolConfig()
+        expected = _expected_metadata(EXPERIMENTS["mlp"], config, "A")
+        with tempfile.TemporaryDirectory() as directory:
+            run_dir = Path(directory)
+            (run_dir / "metadata.json").write_text(
+                json.dumps({"experiment": expected}),
+                encoding="utf-8",
+            )
+            torch.save({"model_state": {}}, run_dir / "best.pt")
+            self.assertFalse(_can_resume(run_dir, expected))
+
+            (run_dir / "training_result.json").write_text(
+                json.dumps(
+                    {
+                        "best_epoch": 1,
+                        "best_val_accuracy": 0.5,
+                        "elapsed_seconds": 1.0,
+                        "parameter_count": 10,
+                    }
+                ),
+                encoding="utf-8",
+            )
+            self.assertTrue(_can_resume(run_dir, expected))
+
+    def test_invalid_model_dimensions_are_rejected(self):
+        with self.assertRaises(ValueError):
+            ConvPatchEmbedding(64, 0, 1, 128)
+        with self.assertRaises(ValueError):
+            LinearPatchEmbedding(64, 7, 1, 128)
 
 
 if __name__ == "__main__":

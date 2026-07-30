@@ -9,14 +9,14 @@ from types import SimpleNamespace
 
 import torch
 from torch import nn
-from torch.utils.data import DataLoader, Dataset, Subset, random_split
+from torch.utils.data import DataLoader, random_split
 from torchvision import datasets as tv_datasets
 from torchvision import transforms
 
 from .data import TranslatedFashionMNIST
+from .engine import evaluate, limit_dataset, train_epoch, validate_training_settings
 from .models import VisionTransformer, count_trainable_parameters
 from .utils import (
-    AverageMeter,
     plot_history,
     resolve_device,
     save_checkpoint,
@@ -85,12 +85,6 @@ def create_parser() -> argparse.ArgumentParser:
     )
 
 
-def _limit_dataset(dataset: Dataset, limit: int) -> Dataset:
-    if limit <= 0 or limit >= len(dataset):
-        return dataset
-    return Subset(dataset, range(limit))
-
-
 def create_base_datasets(args: argparse.Namespace | SimpleNamespace):
     transform = transforms.ToTensor()
     train_base = tv_datasets.FashionMNIST(
@@ -118,8 +112,8 @@ def create_train_val_loaders(args: argparse.Namespace | SimpleNamespace):
         [train_size, val_size],
         generator=split_generator,
     )
-    train_subset = _limit_dataset(train_subset, args.limit_train_samples)
-    val_subset = _limit_dataset(val_subset, args.limit_val_samples)
+    train_subset = limit_dataset(train_subset, args.limit_train_samples)
+    val_subset = limit_dataset(val_subset, args.limit_val_samples)
 
     val_mode = args.val_mode or args.train_mode
     train_dataset = TranslatedFashionMNIST(
@@ -155,7 +149,7 @@ def create_test_loader(
     mode: str,
 ) -> DataLoader:
     _, test_base = create_base_datasets(args)
-    test_base = _limit_dataset(test_base, args.limit_test_samples)
+    test_base = limit_dataset(test_base, args.limit_test_samples)
     test_dataset = TranslatedFashionMNIST(
         test_base,
         canvas_size=args.canvas_size,
@@ -190,74 +184,10 @@ def create_model(args: argparse.Namespace | SimpleNamespace) -> VisionTransforme
     )
 
 
-def train_one_epoch(
-    model: nn.Module,
-    loader: DataLoader,
-    criterion: nn.Module,
-    optimizer: torch.optim.Optimizer,
-    scaler: torch.amp.GradScaler,
-    device: torch.device,
-    amp_enabled: bool,
-) -> dict[str, float]:
-    model.train()
-    loss_meter = AverageMeter()
-    correct = 0
-    total = 0
-
-    for images, labels in loader:
-        images = images.to(device, non_blocking=True)
-        labels = labels.to(device, non_blocking=True)
-        optimizer.zero_grad(set_to_none=True)
-
-        with torch.autocast(
-            device_type=device.type,
-            dtype=torch.float16,
-            enabled=amp_enabled,
-        ):
-            logits = model(images)
-            loss = criterion(logits, labels)
-
-        scaler.scale(loss).backward()
-        scaler.step(optimizer)
-        scaler.update()
-
-        batch_size = labels.shape[0]
-        loss_meter.update(loss.item(), batch_size)
-        correct += (logits.argmax(dim=1) == labels).sum().item()
-        total += batch_size
-
-    return {"loss": loss_meter.average, "accuracy": correct / total}
-
-
-@torch.no_grad()
-def evaluate(
-    model: nn.Module,
-    loader: DataLoader,
-    criterion: nn.Module,
-    device: torch.device,
-) -> dict[str, float]:
-    model.eval()
-    loss_meter = AverageMeter()
-    correct = 0
-    total = 0
-
-    for images, labels in loader:
-        images = images.to(device, non_blocking=True)
-        labels = labels.to(device, non_blocking=True)
-        logits = model(images)
-        loss = criterion(logits, labels)
-
-        batch_size = labels.shape[0]
-        loss_meter.update(loss.item(), batch_size)
-        correct += (logits.argmax(dim=1) == labels).sum().item()
-        total += batch_size
-
-    return {"loss": loss_meter.average, "accuracy": correct / total}
-
-
 def run_training(args: argparse.Namespace | SimpleNamespace):
     if args.val_mode is None:
         args.val_mode = args.train_mode
+    validate_training_settings(args)
     set_seed(args.seed, deterministic=args.deterministic)
     device = resolve_device(args.device)
     output_dir = Path(args.output_dir)
@@ -300,7 +230,7 @@ def run_training(args: argparse.Namespace | SimpleNamespace):
     for epoch in range(1, args.epochs + 1):
         if hasattr(train_loader.dataset, "set_epoch"):
             train_loader.dataset.set_epoch(epoch - 1)
-        train_metrics = train_one_epoch(
+        train_metrics = train_epoch(
             model,
             train_loader,
             criterion,

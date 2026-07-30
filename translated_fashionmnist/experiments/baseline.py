@@ -9,10 +9,10 @@ from pathlib import Path
 
 import torch
 
+from ..engine import evaluate
 from ..training import (
     add_training_arguments,
     create_test_loader,
-    evaluate,
     run_training,
 )
 from ..utils import save_json, write_csv

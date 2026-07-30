@@ -441,8 +441,8 @@ def make_hard_transfer_chart(data: dict[str, dict]) -> Drawing:
         steps=3,
         title="Accuracy on fixed-center train -> random-position test",
     )
-    config_ids = ("mlp", "cnn", "vit_p16_conv")
-    labels = ("MLP", "CNN", "ViT / 16")
+    config_ids = ("mlp", "cnn", "vit_p8_conv")
+    labels = ("MLP", "CNN", "ViT / 8")
     fills = (GRAY, ACCENT, BLUE)
     centers = (left + width * 0.20, left + width * 0.50, left + width * 0.80)
     bar_width = 48
@@ -492,8 +492,8 @@ def make_shift_chart(data: dict[str, dict]) -> Drawing:
         steps=4,
         title="Fixed-position accuracy before and after the test distribution shifts",
     )
-    config_ids = ("mlp", "cnn", "vit_p16_conv")
-    labels = ("MLP", "CNN", "ViT / 16")
+    config_ids = ("mlp", "cnn", "vit_p8_conv")
+    labels = ("MLP", "CNN", "ViT / 8")
     centers = (left + width * 0.20, left + width * 0.50, left + width * 0.80)
     bar_width = 25
     for center, config_id, label in zip(centers, config_ids, labels):
@@ -714,8 +714,8 @@ def build_story(data: dict[str, dict], style_map) -> list:
 
     architecture_table = accuracy_table(
         data,
-        ("mlp", "cnn", "vit_p16_conv"),
-        ("MLP", "CNN", "ViT, patch 16"),
+        ("mlp", "cnn", "vit_p8_conv"),
+        ("MLP", "CNN", "ViT, patch 8"),
         style_map,
     )
 
@@ -728,12 +728,12 @@ def build_story(data: dict[str, dict], style_map) -> list:
             ],
             [
                 Paragraph("35.40%", style_map["FindingValue"]),
-                Paragraph("+18.49 pp", style_map["FindingValue"]),
+                Paragraph("+16.59 pp", style_map["FindingValue"]),
                 Paragraph("205,994", style_map["FindingValue"]),
             ],
             [
                 Paragraph("CNN", style_map["FindingText"]),
-                Paragraph("over patch-16 ViT", style_map["FindingText"]),
+                Paragraph("over patch-8 ViT", style_map["FindingText"]),
                 Paragraph("CNN parameters", style_map["FindingText"]),
             ],
         ],
@@ -812,15 +812,15 @@ def build_story(data: dict[str, dict], style_map) -> list:
             [
                 Paragraph("01", style_map["FindingValue"]),
                 Paragraph(
-                    "<b>Architecture dominates.</b> CNN leads all four settings and "
-                    "retains the most accuracy under fixed-to-random transfer.",
+                    "<b>CNN performs best under the shared recipe.</b> It leads all four "
+                    "settings and retains the most fixed-to-random accuracy.",
                     style_map["BodySmall"],
                 ),
             ],
             [
                 Paragraph("02", style_map["FindingValue"]),
                 Paragraph(
-                    "<b>Patch size 8 is the practical ViT choice.</b> It gives the best "
+                    "<b>Patch size 8 leads three of four settings.</b> It gives the best "
                     "B -> A result without the 256-token cost of patch size 4.",
                     style_map["BodySmall"],
                 ),
@@ -828,7 +828,7 @@ def build_story(data: dict[str, dict], style_map) -> list:
             [
                 Paragraph("03", style_map["FindingValue"]),
                 Paragraph(
-                    "<b>Embedding syntax is not decisive.</b> Conv2d and "
+                    "<b>Equivalent embeddings stay close in this run.</b> Conv2d and "
                     "Flatten + Linear differ by at most 0.61 percentage points.",
                     style_map["BodySmall"],
                 ),
@@ -854,18 +854,18 @@ def build_story(data: dict[str, dict], style_map) -> list:
                 [
                     Paragraph("Scope", style_map["MiniTitle"]),
                     Paragraph(
-                        "- One formal seed; no variance estimate.<br/>"
-                        "- Model sizes are not exactly matched.<br/>"
-                        "- Runtime is hardware-specific.",
+                        "- One training and placement seed; no variance estimate.<br/>"
+                        "- Model sizes and optimal hyperparameters are not matched.<br/>"
+                        "- Runtime is hardware- and order-specific.",
                         style_map["BodySmall"],
                     ),
                 ],
                 [
                     Paragraph("Interpretation rule", style_map["MiniTitle"]),
                     Paragraph(
-                        "Differences below 1 percentage point are treated as practically "
-                        "similar. Results support a controlled course comparison, not a "
-                        "population-level claim.",
+                        "Small differences are described only as numerically close in this "
+                        "run; no significance claim is made. Conclusions apply to the "
+                        "shared protocol rather than all possible training recipes.",
                         style_map["BodySmall"],
                     ),
                 ],
@@ -905,8 +905,15 @@ def build_story(data: dict[str, dict], style_map) -> list:
                 Paragraph("42 / 15", style_map["TableCell"]),
             ],
             [
+                Paragraph("Dependency lock", style_map["TableCell"]),
+                Paragraph("requirements-lock.txt", style_map["TableCell"]),
+            ],
+            [
                 Paragraph("Environment", style_map["TableCell"]),
-                Paragraph("Python 3.12, PyTorch 2.11, CUDA 12.8", style_map["TableCell"]),
+                Paragraph(
+                    "Python 3.12.13, PyTorch 2.11.0, CUDA 12.8",
+                    style_map["TableCell"],
+                ),
             ],
             [
                 Paragraph("Hardware", style_map["TableCell"]),
@@ -940,6 +947,11 @@ def build_story(data: dict[str, dict], style_map) -> list:
                 Paragraph("train, validate, and evaluate", style_map["TableCell"]),
             ],
             [
+                Paragraph("Engine", style_map["TableCell"]),
+                Paragraph("engine.py", style_map["TableCell"]),
+                Paragraph("shared training and evaluation primitives", style_map["TableCell"]),
+            ],
+            [
                 Paragraph("Runner", style_map["TableCell"]),
                 Paragraph("experiments/compare.py", style_map["TableCell"]),
                 Paragraph("execute all three comparison groups", style_map["TableCell"]),
@@ -956,10 +968,10 @@ def build_story(data: dict[str, dict], style_map) -> list:
 
     abstract = side_note(
         "<i>Abstract.</i> We test whether image classifiers retain accuracy when object "
-        "position changes between training and testing. CNN is the strongest baseline "
-        "and reaches 35.40% on the hardest fixed-to-random transfer. Within the ViT "
-        "family, patch size 8 gives the best accuracy-cost balance. Conv2d and "
-        "Flatten + Linear patch embeddings remain within 0.61 percentage points.",
+        "position changes between training and testing. Under one shared training recipe, "
+        "CNN records the highest accuracy and reaches 35.40% on the hardest fixed-to-random "
+        "transfer. Patch size 8 leads three of four ViT settings. Equivalent Conv2d and "
+        "Flatten + Linear projections remain within 0.61 percentage points in this run.",
         style_map,
     )
 
@@ -1003,7 +1015,7 @@ def build_story(data: dict[str, dict], style_map) -> list:
         section_header("2", "Controlled protocol", style_map),
         Paragraph(
             "Each configuration trains one model on A and one on B. Validation chooses "
-            "the checkpoint; the official test set is used once for final evaluation.",
+            "the checkpoint; the official test set is evaluated only after selection.",
             style_map["Body"],
         ),
         controls_table,
@@ -1017,7 +1029,7 @@ def build_story(data: dict[str, dict], style_map) -> list:
         *page_heading(
             "MODEL COMPARISON",
             "Architecture and Position Shift",
-            "MLP, CNN, and patch-16 ViT under one evaluation protocol",
+            "MLP, CNN, and patch-8 ViT under one evaluation protocol",
             style_map,
         ),
         section_header("3", "Accuracy", style_map),
@@ -1049,7 +1061,7 @@ def build_story(data: dict[str, dict], style_map) -> list:
         section_header("5", "Patch scale", style_map),
         chart_block(
             make_patch_chart(data),
-            "Figure 3. Patch size 8 gives the strongest observed trade-off.",
+            "Figure 3. Patch size 8 leads three of four evaluated settings.",
             style_map,
         ),
         patch_table,
@@ -1080,7 +1092,7 @@ def build_story(data: dict[str, dict], style_map) -> list:
         *page_heading(
             "DISCUSSION",
             "Conclusions and Reproducibility",
-            "Concise interpretation and an exact reproduction path",
+            "Concise interpretation and a documented reproduction path",
             style_map,
         ),
         section_header("7", "Conclusions", style_map),
@@ -1096,12 +1108,6 @@ def build_story(data: dict[str, dict], style_map) -> list:
         ),
         section_header("10", "Implementation map", style_map),
         implementation,
-        Spacer(1, 3 * mm),
-        side_note(
-            "<b>Reproduction check.</b> One entry point writes the metric table, run "
-            "manifest, and three comparison figures to stable output paths.",
-            style_map,
-        ),
     ]
     return story
 

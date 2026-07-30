@@ -7,7 +7,9 @@ import platform
 from dataclasses import asdict
 from pathlib import Path
 
+import numpy as np
 import torch
+import torchvision
 
 from ..utils import save_json, write_csv
 from .config import configuration_ids_for_groups
@@ -94,8 +96,16 @@ def main() -> None:
         "environment": {
             "python": platform.python_version(),
             "torch": torch.__version__,
+            "torchvision": torchvision.__version__,
+            "numpy": np.__version__,
             "cuda": torch.version.cuda,
             "gpu": torch.cuda.get_device_name(0) if torch.cuda.is_available() else None,
+            "platform": platform.platform(),
+            "determinism": (
+                "deterministic algorithms enabled"
+                if protocol.deterministic
+                else "seeded; deterministic algorithms disabled"
+            ),
         },
     }
     save_json(manifest, output_dir / "manifest.json")

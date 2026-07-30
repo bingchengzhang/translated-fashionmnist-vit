@@ -15,6 +15,8 @@ class ConvPatchEmbedding(nn.Module):
         embed_dim: int,
     ) -> None:
         super().__init__()
+        if image_size <= 0 or patch_size <= 0:
+            raise ValueError("image_size and patch_size must be positive.")
         if image_size % patch_size != 0:
             raise ValueError("image_size must be divisible by patch_size.")
         self.grid_size = image_size // patch_size
@@ -42,6 +44,8 @@ class LinearPatchEmbedding(nn.Module):
         embed_dim: int,
     ) -> None:
         super().__init__()
+        if image_size <= 0 or patch_size <= 0:
+            raise ValueError("image_size and patch_size must be positive.")
         if image_size % patch_size != 0:
             raise ValueError("image_size must be divisible by patch_size.")
         self.patch_size = patch_size
@@ -73,6 +77,12 @@ class VisionTransformer(nn.Module):
         patch_embedding: str = "conv",
     ) -> None:
         super().__init__()
+        if depth < 1:
+            raise ValueError("depth must be at least 1.")
+        if num_heads < 1 or embed_dim < 1 or mlp_dim < 1:
+            raise ValueError("embed_dim, num_heads, and mlp_dim must be positive.")
+        if not 0 <= dropout < 1:
+            raise ValueError("dropout must be in [0, 1).")
         if embed_dim % num_heads != 0:
             raise ValueError("embed_dim must be divisible by num_heads.")
 
@@ -129,10 +139,12 @@ class VisionTransformer(nn.Module):
 
 
 class MLPClassifier(nn.Module):
-    """Parameter-scale-matched MLP for 64 x 64 grayscale inputs."""
+    """Compact MLP baseline for grayscale inputs."""
 
     def __init__(self, image_size: int = 64, num_classes: int = 10) -> None:
         super().__init__()
+        if image_size < 1 or num_classes < 1:
+            raise ValueError("image_size and num_classes must be positive.")
         input_dim = image_size * image_size
         hidden_dim = 128
         self.network = nn.Sequential(
@@ -156,6 +168,8 @@ class CNNClassifier(nn.Module):
 
     def __init__(self, num_classes: int = 10) -> None:
         super().__init__()
+        if num_classes < 1:
+            raise ValueError("num_classes must be positive.")
         self.features = nn.Sequential(
             nn.Conv2d(1, 32, kernel_size=3, padding=1),
             nn.BatchNorm2d(32),

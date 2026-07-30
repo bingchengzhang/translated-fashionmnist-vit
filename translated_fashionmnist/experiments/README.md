@@ -7,7 +7,7 @@ comparison groups.
 
 | Group | Configurations | Controlled factors |
 |---|---|---|
-| Architecture | MLP, CNN, ViT patch 16 | data split and training protocol |
+| Architecture | MLP, CNN, ViT patch 8 | data split and training protocol |
 | Patch scale | ViT patch 4, 8, 16 | Transformer depth, width, and optimizer |
 | Patch embedding | Conv2d, Flatten + Linear | patch size and Transformer body |
 
@@ -47,16 +47,6 @@ python -m translated_fashionmnist.experiments.compare \
   --output-dir results_smoke
 ```
 
-The formal summary is stored in
-`results/metrics.csv`. The repository retains one consolidated training-history
-file and three core figures; raw checkpoints are excluded.
-
-## External record
-
-`references/teammate_vit.csv` records public metrics from
-[`kicious/translated-fashion-mnist-vit`](https://github.com/kicious/translated-fashion-mnist-vit)
-at commit `943fa7b68730bc8ea7786bb41c7b8dc1d488883a`.
-
-That repository reports the best test value observed across epochs. The present
-study selects checkpoints on validation data, so the external values are
-provenance only and are not treated as a statistically equivalent baseline.
+The formal summary is stored in `results/metrics.csv`. The repository retains
+one consolidated training-history file and three core figures; raw checkpoints
+are excluded.

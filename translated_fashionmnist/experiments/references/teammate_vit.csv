@@ -1,5 +1,0 @@
-source_repo,source_commit,setting,train_mode,test_mode,reported_accuracy,metric_note
-https://github.com/kicious/translated-fashion-mnist-vit,943fa7b68730bc8ea7786bb41c7b8dc1d488883a,1,A,A,79.35,best test accuracy reported in summary.json
-https://github.com/kicious/translated-fashion-mnist-vit,943fa7b68730bc8ea7786bb41c7b8dc1d488883a,2,B,B,88.22,best test accuracy reported in summary.json
-https://github.com/kicious/translated-fashion-mnist-vit,943fa7b68730bc8ea7786bb41c7b8dc1d488883a,3,A,B,80.48,best test accuracy reported in summary.json
-https://github.com/kicious/translated-fashion-mnist-vit,943fa7b68730bc8ea7786bb41c7b8dc1d488883a,4,B,A,19.37,best test accuracy reported in summary.json

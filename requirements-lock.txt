@@ -1,0 +1,6 @@
+# Exact environment used for the formal comparison record (Python 3.12.13).
+torch==2.11.0
+torchvision==0.26.0
+numpy==2.4.4
+matplotlib==3.11.1
+reportlab==4.4.9

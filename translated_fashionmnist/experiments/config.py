@@ -57,7 +57,7 @@ EXPERIMENTS: dict[str, ExperimentDefinition] = {
 
 
 GROUPS: dict[str, tuple[str, ...]] = {
-    "model": ("mlp", "cnn", "vit_p16_conv"),
+    "model": ("mlp", "cnn", "vit_p8_conv"),
     "patch_size": ("vit_p4_conv", "vit_p8_conv", "vit_p16_conv"),
     "patch_embedding": ("vit_p16_conv", "vit_p16_linear"),
 }

@@ -1,6 +1,6 @@
 # Results
 
-This directory contains the compact record of the baseline and optional
+This directory contains the compact record of the baseline and controlled
 comparison experiments.
 
 ## Baseline ViT

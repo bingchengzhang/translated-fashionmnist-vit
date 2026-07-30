@@ -1,0 +1,9 @@
+{
+  "config_id": "mlp",
+  "train_mode": "B",
+  "best_epoch": 14,
+  "best_val_accuracy": 0.8985,
+  "elapsed_seconds": 55.857752084732056,
+  "parameter_count": 542474,
+  "checkpoint": "results/comparisons/runs/mlp/train_B/best.pt"
+}

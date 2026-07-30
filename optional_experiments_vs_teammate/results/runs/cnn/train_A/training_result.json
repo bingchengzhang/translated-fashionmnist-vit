@@ -1,9 +1,0 @@
-{
-  "config_id": "cnn",
-  "train_mode": "A",
-  "best_epoch": 15,
-  "best_val_accuracy": 0.9273333333333333,
-  "elapsed_seconds": 145.27036905288696,
-  "parameter_count": 205994,
-  "checkpoint": "optional_experiments_vs_teammate/results/runs/cnn/train_A/best.pt"
-}

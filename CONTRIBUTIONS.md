@@ -16,4 +16,4 @@
 
 本仓库没有修改或复制同学项目代码。外部对照仅使用该仓库 commit
 `943fa7b68730bc8ea7786bb41c7b8dc1d488883a` 已公开的四项汇总指标，
-来源记录在 `optional_experiments_vs_teammate/teammate_baseline.csv`。
+来源记录在 `experiments/comparisons/references/teammate_vit.csv`。

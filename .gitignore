@@ -9,7 +9,7 @@ outputs/
 checkpoints/
 *.pt
 *.pth
-optional_experiments_vs_teammate/results_smoke/
+results/comparisons_smoke/
 
 # Environments and editors
 .venv/

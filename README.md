@@ -17,7 +17,9 @@ A→A、B→B、A→B 和 B→A，其中箭头左侧表示训练分布，右侧�
 .
 ├── datasets/                         # 位置可变数据集
 ├── models/                           # ViT
-├── optional_experiments_vs_teammate/ # bc 负责的可选实验与外部基线对比
+├── experiments/comparisons/          # 三组对比实验代码与复现说明
+├── results/comparisons/              # 指标、训练记录和报告图表
+├── reports/                          # 对比实验报告
 ├── tests/                            # 数据、模型和实验配置测试
 ├── train.py                          # 单模型训练
 ├── run_experiments.py                # 基础四 setting 实验
@@ -48,10 +50,10 @@ A→A、B→B、A→B 和 B→A，其中箭头左侧表示训练分布，右侧�
 
 ![Four-setting baseline](assets/four_settings_summary.png)
 
-## bc：可选实验与同学项目对比
+## 三组对比实验
 
-可选实验位于
-[optional_experiments_vs_teammate](optional_experiments_vs_teammate/README.md)，
+对比实验代码位于
+[experiments/comparisons](experiments/comparisons/README.md)，
 包含三组对比：
 
 1. MLP、CNN、ViT；
@@ -107,14 +109,18 @@ python run_experiments.py \
 运行 bc 的全部可选实验：
 
 ```bash
-python -m optional_experiments_vs_teammate.run_comparisons \
+python -m experiments.comparisons.run \
   --groups all \
   --epochs 15 \
   --batch-size 64
 ```
 
 详细参数、输出文件和口径说明见
-[可选实验说明](optional_experiments_vs_teammate/README.md)。
+[对比实验说明](experiments/comparisons/README.md)。
+
+最终对比实验报告见
+[reports/comparison_study.pdf](reports/comparison_study.pdf)，正文仅讨论三组对比，
+关键代码列在报告附录。
 
 ## 数据与版本控制
 

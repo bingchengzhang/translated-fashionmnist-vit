@@ -1,9 +1,0 @@
-{
-  "config_id": "vit_p16_linear",
-  "train_mode": "B",
-  "best_epoch": 14,
-  "best_val_accuracy": 0.8908333333333334,
-  "elapsed_seconds": 216.0658721923828,
-  "parameter_count": 829834,
-  "checkpoint": "optional_experiments_vs_teammate/results/runs/vit_p16_linear/train_B/best.pt"
-}

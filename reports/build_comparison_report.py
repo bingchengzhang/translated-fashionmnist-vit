@@ -848,13 +848,13 @@ def build_story(data: dict[str, dict], style_map) -> list:
                 Paragraph("A -> B", style_map["TableCellStrong"]),
                 Paragraph("random", style_map["TableCellCenter"]),
                 Paragraph("center", style_map["TableCellCenter"]),
-                Paragraph("random-to-fixed transfer", style_map["TableCell"]),
+                Paragraph("transfer within A's position support", style_map["TableCell"]),
             ],
             [
                 Paragraph("B -> A", style_map["TableCellStrong"]),
                 Paragraph("center", style_map["TableCellCenter"]),
                 Paragraph("random", style_map["TableCellCenter"]),
-                Paragraph("hardest position shift", style_map["TableCell"]),
+                Paragraph("one-to-many position transfer", style_map["TableCell"]),
             ],
         ],
         [25 * mm, 31 * mm, 31 * mm, 77 * mm],
@@ -909,23 +909,47 @@ def build_story(data: dict[str, dict], style_map) -> list:
         ("MLP", "CNN", "ViT, patch 8"),
         style_map,
     )
+    model_ids = ("mlp", "cnn", "vit_p8_conv")
+    random_to_center_max_change = max(
+        abs(
+            data[config_id]["accuracy"][("A", "B")]
+            - data[config_id]["accuracy"][("A", "A")]
+        )
+        for config_id in model_ids
+    )
+    hard_transfer_drops = {
+        config_id: (
+            data[config_id]["accuracy"][("B", "B")]
+            - data[config_id]["accuracy"][("B", "A")]
+        )
+        for config_id in model_ids
+    }
+    hard_drop_min = min(hard_transfer_drops.values())
+    hard_drop_max = max(hard_transfer_drops.values())
+    cnn_hard_accuracy = data["cnn"]["accuracy"][("B", "A")]
+    cnn_advantage = (
+        cnn_hard_accuracy - data["vit_p8_conv"]["accuracy"][("B", "A")]
+    )
 
     findings = Table(
         [
             [
-                Paragraph("BEST B -> A", style_map["FindingLabel"]),
-                Paragraph("CNN ADVANTAGE", style_map["FindingLabel"]),
-                Paragraph("SMALLEST MODEL", style_map["FindingLabel"]),
+                Paragraph("B -> A LEADER", style_map["FindingLabel"]),
+                Paragraph("SMALLEST B -> A DROP", style_map["FindingLabel"]),
+                Paragraph("A -> B CHANGE", style_map["FindingLabel"]),
             ],
             [
-                Paragraph("35.40%", style_map["FindingValue"]),
-                Paragraph("+16.59 pp", style_map["FindingValue"]),
-                Paragraph("205,994", style_map["FindingValue"]),
+                Paragraph(f"{cnn_hard_accuracy:.2f}%", style_map["FindingValue"]),
+                Paragraph(f"{hard_drop_min:.2f} pp", style_map["FindingValue"]),
+                Paragraph(
+                    f"{random_to_center_max_change:.2f} pp max",
+                    style_map["FindingValue"],
+                ),
             ],
             [
                 Paragraph("CNN", style_map["FindingText"]),
-                Paragraph("over patch-8 ViT", style_map["FindingText"]),
-                Paragraph("CNN parameters", style_map["FindingText"]),
+                Paragraph("CNN, relative to B -> B", style_map["FindingText"]),
+                Paragraph("all three architectures", style_map["FindingText"]),
             ],
         ],
         colWidths=[54.67 * mm] * 3,
@@ -1009,26 +1033,32 @@ def build_story(data: dict[str, dict], style_map) -> list:
             Paragraph("Absolute gap", style_map["TableHeader"]),
         ]
     ]
+    embedding_gaps: list[float] = []
     for label, key in zip(SETTINGS, SETTING_KEYS):
         conv = data["vit_p16_conv"]["accuracy"][key]
         linear = data["vit_p16_linear"]["accuracy"][key]
+        gap = abs(conv - linear)
+        embedding_gaps.append(gap)
         embedding_rows.append(
             [
                 Paragraph(label, style_map["TableCell"]),
                 Paragraph(f"{conv:.2f}", style_map["TableCellCenter"]),
                 Paragraph(f"{linear:.2f}", style_map["TableCellCenter"]),
-                Paragraph(f"{abs(conv - linear):.2f}", style_map["TableCellCenter"]),
+                Paragraph(f"{gap:.2f}", style_map["TableCellCenter"]),
             ]
         )
     embedding_table = ruled_table(embedding_rows, [41 * mm] * 4)
+    embedding_gap_max = max(embedding_gaps)
 
     conclusions = Table(
         [
             [
                 Paragraph("01", style_map["FindingValue"]),
                 Paragraph(
-                    "<b>CNN performs best under the shared recipe.</b> It leads all four "
-                    "settings and retains the most fixed-to-random accuracy.",
+                    "<b>Transfer is strongly asymmetric.</b> A-trained models stay within "
+                    f"{random_to_center_max_change:.2f} points at center, while B-trained "
+                    f"models lose {hard_drop_min:.2f}-{hard_drop_max:.2f} points at random "
+                    "positions. CNN leads all four settings.",
                     style_map["BodySmall"],
                 ),
             ],
@@ -1044,7 +1074,8 @@ def build_story(data: dict[str, dict], style_map) -> list:
                 Paragraph("03", style_map["FindingValue"]),
                 Paragraph(
                     "<b>Equivalent embeddings stay close in this run.</b> Conv2d and "
-                    "Flatten + Linear differ by at most 0.61 percentage points.",
+                    f"Flatten + Linear differ by at most {embedding_gap_max:.2f} "
+                    "percentage points.",
                     style_map["BodySmall"],
                 ),
             ],
@@ -1071,6 +1102,7 @@ def build_story(data: dict[str, dict], style_map) -> list:
                     Paragraph(
                         "- One training and placement seed; no variance estimate.<br/>"
                         "- Model sizes and optimal hyperparameters are not matched.<br/>"
+                        "- Only translation on a black canvas is tested.<br/>"
                         "- Runtime is hardware- and order-specific.",
                         style_map["BodySmall"],
                     ),
@@ -1185,12 +1217,12 @@ def build_story(data: dict[str, dict], style_map) -> list:
     )
 
     abstract = side_note(
-        "<i>Abstract.</i> We test whether image classifiers retain accuracy when object "
-        "position changes between training and testing. Across six configurations and one "
-        "shared training recipe, CNN records the highest accuracy and reaches 35.40% on the "
-        "hardest fixed-to-random transfer. Patch size 8 leads three of four ViT settings. "
-        "Equivalent Conv2d and Flatten + Linear projections remain within 0.61 percentage "
-        "points in this run.",
+        "<i>Abstract.</i> Under one controlled recipe, transfer is asymmetric: model "
+        f"baselines trained on A change by at most {random_to_center_max_change:.2f} points "
+        f"at center, while those trained on B lose {hard_drop_min:.2f}-{hard_drop_max:.2f} "
+        f"points at random positions. CNN leads all four settings ({cnn_hard_accuracy:.2f}% "
+        "on B -> A). For ViT, patch size 8 leads three settings; Conv2d and Linear "
+        f"projections differ by at most {embedding_gap_max:.2f} points in this single-seed run.",
         style_map,
     )
 
@@ -1226,7 +1258,7 @@ def build_story(data: dict[str, dict], style_map) -> list:
         section_header("1", "Question", style_map),
         Paragraph(
             "A classifier may learn class appearance and object location together. "
-            "We isolate location by placing the same 28 x 28 object either uniformly "
+            "We isolate location by placing each 28 x 28 image either uniformly "
             "over all valid integer positions (A) or at the canvas center (B).",
             style_map["Body"],
         ),
@@ -1234,15 +1266,16 @@ def build_story(data: dict[str, dict], style_map) -> list:
         section_header("2", "Controlled protocol", style_map),
         Paragraph(
             "Each of six configurations is fitted once on A and once on B. Validation "
-            "selects the checkpoint; both A and B test sets are then measured, producing "
-            "12 fits and 24 final test evaluations.",
+            "selects the checkpoint; both test distributions are then measured on the "
+            "same 10,000 held-out images, producing 12 fits and 24 final evaluations.",
             style_map["Body"],
         ),
         controls_table,
         Spacer(1, 3 * mm),
         side_note(
-            "<b>Primary measure.</b> B -> A is the hardest setting because a model "
-            "trained only on centered objects must classify objects across the canvas.",
+            "<b>Transfer direction.</b> B -> A expands from one observed location to "
+            "1,369 valid locations. A -> B evaluates one location already inside the "
+            "support of A.",
             style_map,
         ),
         Spacer(1, 3 * mm),
@@ -1256,7 +1289,7 @@ def build_story(data: dict[str, dict], style_map) -> list:
         *page_heading(
             "MODEL COMPARISON",
             "Architecture and Position Shift",
-            "MLP, CNN, and patch-8 ViT under one evaluation protocol",
+            "MLP (2 x 128), CNN (5 conv layers), and ViT (d=128, L=4, H=4, p=8)",
             style_map,
         ),
         section_header("3", "Accuracy", style_map),
@@ -1268,21 +1301,23 @@ def build_story(data: dict[str, dict], style_map) -> list:
         ),
         chart_block(
             make_hard_transfer_chart(data),
-            "Figure 2. CNN retains substantially more accuracy on B -> A.",
+            f"Figure 2. CNN reaches {cnn_hard_accuracy:.2f}% on B -> A, "
+            f"{cnn_advantage:.2f} points above patch-8 ViT.",
             style_map,
         ),
         findings,
         section_header("4", "Effect of the position shift", style_map),
         chart_block(
             make_shift_chart(data),
-            "Figure 3. All models degrade after centered training is tested at random positions.",
+            f"Figure 3. Centered-only training loses {hard_drop_min:.2f}-"
+            f"{hard_drop_max:.2f} points under random-position testing.",
             style_map,
         ),
         PageBreak(),
         *page_heading(
             "VIT ABLATIONS",
             "Patch Scale and Embedding",
-            "Two controlled changes to the shared Transformer configuration",
+            "ViT body fixed at d=128, depth 4, four heads, and FFN width 512",
             style_map,
         ),
         section_header("5", "Patch scale", style_map),
@@ -1313,7 +1348,8 @@ def build_story(data: dict[str, dict], style_map) -> list:
         embedding_table,
         Spacer(1, 2.5 * mm),
         Paragraph(
-            "Table 3. Test accuracy (%) for patch size 16. Maximum absolute gap: 0.61 points.",
+            f"Table 3. Test accuracy (%) for patch size 16. Maximum absolute gap: "
+            f"{embedding_gap_max:.2f} points.",
             style_map["Caption"],
         ),
         PageBreak(),

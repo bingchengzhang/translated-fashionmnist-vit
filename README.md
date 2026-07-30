@@ -16,10 +16,13 @@ under A -> A, B -> B, A -> B, and B -> A.
 | ViT, patch 4 | 75.28 | 87.22 | 74.97 | 17.02 |
 | ViT, Flatten + Linear | 79.67 | 88.80 | 80.48 | 16.30 |
 
-The CNN is strongest in all four settings. Among the ViTs, patch size 8 gives
-the most balanced result. Conv2d and Flatten + Linear patch embeddings differ
-by no more than 0.61 percentage points in this run. These are single-seed
-results; small differences are not treated as statistically significant.
+Transfer is asymmetric: A-trained models remain within 0.73 percentage points
+when tested at the center, while B-trained models lose 57.74-75.58 points when
+tested at random positions. The CNN is strongest in all four settings. Among
+the ViTs, patch size 8 leads three settings. Conv2d and Flatten + Linear patch
+embeddings differ by no more than 0.61 points in this run. These are
+single-seed results; small differences are not treated as statistically
+significant.
 
 ## Repository layout
 

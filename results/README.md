@@ -27,6 +27,10 @@ The original four-setting run uses a patch-size-8 ViT.
 | ViT, patch 4 | 829,834 | 75.28 | 87.22 | 74.97 | 17.02 |
 | ViT, Flatten + Linear | 829,834 | 79.67 | 88.80 | 80.48 | 16.30 |
 
+For MLP, CNN, and patch-8 ViT, A -> B differs from A -> A by at most 0.73
+points. The reverse shift is much larger: B -> A falls 57.74-75.58 points
+below B -> B.
+
 The retained result files have distinct roles:
 
 - `metrics.csv` contains all 24 final test measurements.

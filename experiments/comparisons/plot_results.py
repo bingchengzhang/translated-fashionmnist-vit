@@ -6,16 +6,47 @@ import csv
 from pathlib import Path
 
 import matplotlib.pyplot as plt
+from matplotlib import font_manager
 
 from .configs import EXPERIMENTS, GROUPS
 
 
 SETTING_LABELS = {
-    1: "1\nA -> A",
-    2: "2\nB -> B",
-    3: "3\nA -> B",
-    4: "4\nB -> A",
+    1: "1\nA→A",
+    2: "2\nB→B",
+    3: "3\nA→B",
+    4: "4\nB→A",
 }
+PALETTE = ("#356D9E", "#D8792B", "#4B9366", "#8A63A8")
+
+
+def _configure_style() -> None:
+    font_candidates = (
+        Path(r"C:\Windows\Fonts\msyh.ttc"),
+        Path("/mnt/c/Windows/Fonts/msyh.ttc"),
+    )
+    for font_path in font_candidates:
+        if font_path.exists():
+            font_manager.fontManager.addfont(str(font_path))
+            plt.rcParams["font.family"] = font_manager.FontProperties(
+                fname=str(font_path)
+            ).get_name()
+            break
+    plt.rcParams.update(
+        {
+            "axes.unicode_minus": False,
+            "axes.edgecolor": "#46515E",
+            "axes.labelcolor": "#27313D",
+            "axes.titlecolor": "#172231",
+            "axes.titlesize": 12,
+            "axes.labelsize": 10,
+            "xtick.color": "#27313D",
+            "ytick.color": "#27313D",
+            "legend.frameon": False,
+            "figure.facecolor": "white",
+            "savefig.facecolor": "white",
+        }
+    )
 
 
 def read_results(path: str | Path) -> list[dict]:
@@ -70,10 +101,11 @@ def _plot_group(
             values,
             width=width,
             label=EXPERIMENTS[config_id].display_name,
+            color=PALETTE[index],
         )
         axis.bar_label(bars, fmt="%.1f", fontsize=8, padding=2)
     axis.set_xticks(x, [SETTING_LABELS[setting] for setting in settings])
-    axis.set_ylabel("Test accuracy (%)")
+    axis.set_ylabel("测试准确率（%）")
     axis.set_ylim(0, 100)
     axis.set_title(title)
     axis.grid(axis="y", alpha=0.25)
@@ -93,19 +125,31 @@ def _plot_generalization(rows: list[dict], output: Path) -> None:
     x = list(range(len(config_ids)))
     figure, axes = plt.subplots(1, 2, figsize=(11, 4.8))
     width = 0.36
-    axes[0].bar([value - width / 2 for value in x], matched, width, label="B -> B")
-    axes[0].bar([value + width / 2 for value in x], shifted, width, label="B -> A")
+    axes[0].bar(
+        [value - width / 2 for value in x],
+        matched,
+        width,
+        label="B→B",
+        color=PALETTE[0],
+    )
+    axes[0].bar(
+        [value + width / 2 for value in x],
+        shifted,
+        width,
+        label="B→A",
+        color=PALETTE[1],
+    )
     axes[0].set_xticks(x, labels)
     axes[0].set_ylim(0, 100)
-    axes[0].set_ylabel("Test accuracy (%)")
-    axes[0].set_title("Fixed-position training under distribution shift")
+    axes[0].set_ylabel("测试准确率（%）")
+    axes[0].set_title("固定位置训练后的分布变化")
     axes[0].grid(axis="y", alpha=0.25)
     axes[0].legend()
 
-    bars = axes[1].bar(labels, drops, color="#C44E52")
-    axes[1].bar_label(bars, fmt="%.1f pp", padding=3)
-    axes[1].set_ylabel("Accuracy drop (percentage points)")
-    axes[1].set_title("B -> B minus B -> A")
+    bars = axes[1].bar(labels, drops, color="#B84A4F")
+    axes[1].bar_label(bars, fmt="%.1f", padding=3)
+    axes[1].set_ylabel("准确率下降（百分点）")
+    axes[1].set_title("B→B 减 B→A")
     axes[1].grid(axis="y", alpha=0.25)
     figure.tight_layout()
     figure.savefig(output, dpi=200)
@@ -122,10 +166,10 @@ def _plot_training_time(rows: list[dict], output: Path) -> None:
     totals = [_training_minutes(rows, config_id) for config_id in config_ids]
 
     figure, axis = plt.subplots(figsize=(10, 5.2))
-    bars = axis.bar(labels, totals, color="#4C72B0")
-    axis.bar_label(bars, fmt="%.1f min", fontsize=8, padding=3)
-    axis.set_ylabel("Total training time for A and B (minutes)")
-    axis.set_title("Training cost under the common protocol")
+    bars = axis.bar(labels, totals, color=PALETTE[0])
+    axis.bar_label(bars, fmt="%.1f 分钟", fontsize=8, padding=3)
+    axis.set_ylabel("训练 A、B 两个模型的总时间（分钟）")
+    axis.set_title("统一协议下的训练成本")
     axis.grid(axis="y", alpha=0.25)
     axis.tick_params(axis="x", rotation=18)
     figure.tight_layout()
@@ -160,17 +204,17 @@ def _plot_training_dynamics(
                 markersize=2.8,
                 linewidth=1.5,
                 color=color,
-                label=f"train {train_mode}",
+                label=f"训练分布 {train_mode}",
             )
         axis.set_title(EXPERIMENTS[config_id].display_name)
         axis.grid(alpha=0.25)
         axis.set_ylim(45, 100)
     for axis in axes[-1]:
-        axis.set_xlabel("Epoch")
+        axis.set_xlabel("训练轮次")
     for axis in axes[:, 0]:
-        axis.set_ylabel("Validation accuracy (%)")
+        axis.set_ylabel("验证准确率（%）")
     axes[0, 0].legend()
-    figure.suptitle("Validation accuracy during training", fontsize=14)
+    figure.suptitle("训练过程中的验证准确率", fontsize=14)
     figure.tight_layout()
     figure.savefig(output, dpi=200)
     plt.close(figure)
@@ -204,20 +248,22 @@ def _plot_teammate_comparison(
         [value - width / 2 for value in x],
         ours,
         width,
-        label="bc protocol (validation-selected)",
+        label="本实验（验证集选模）",
+        color=PALETTE[0],
     )
     bars_teammate = axis.bar(
         [value + width / 2 for value in x],
         reported,
         width,
-        label="teammate repository (reported best)",
+        label="同学仓库（公开最佳记录）",
+        color=PALETTE[1],
     )
     axis.bar_label(bars_ours, fmt="%.1f", fontsize=8, padding=2)
     axis.bar_label(bars_teammate, fmt="%.1f", fontsize=8, padding=2)
     axis.set_xticks(x, [SETTING_LABELS[setting] for setting in settings])
-    axis.set_ylabel("Accuracy (%)")
+    axis.set_ylabel("准确率（%）")
     axis.set_ylim(0, 100)
-    axis.set_title("ViT patch-16 reference comparison")
+    axis.set_title("ViT patch-16 外部参考")
     axis.grid(axis="y", alpha=0.25)
     axis.legend()
     figure.tight_layout()
@@ -289,6 +335,7 @@ def generate_visualizations(
     assets_dir: str | Path,
     summary_markdown: str | Path,
 ) -> None:
+    _configure_style()
     rows = read_results(results_csv)
     assets = Path(assets_dir)
     assets.mkdir(parents=True, exist_ok=True)
@@ -297,7 +344,7 @@ def generate_visualizations(
         _plot_group(
             rows,
             GROUPS["model"],
-            "Model comparison under four position settings",
+            "三类模型在四种位置设置下的比较",
             assets / "model_comparison.png",
         )
         _plot_generalization(rows, assets / "position_generalization.png")
@@ -305,7 +352,7 @@ def generate_visualizations(
         _plot_group(
             rows,
             GROUPS["patch_size"],
-            "ViT patch-size comparison",
+            "ViT Patch 尺度比较",
             assets / "patch_size_comparison.png",
         )
     if all(
@@ -315,7 +362,7 @@ def generate_visualizations(
         _plot_group(
             rows,
             GROUPS["patch_embedding"],
-            "Patch embedding comparison",
+            "Patch Embedding 实现比较",
             assets / "patch_embedding_comparison.png",
         )
     if any(row["config_id"] == "vit_p16_conv" for row in rows):

@@ -19,7 +19,6 @@ from reportlab.platypus import (
     Frame,
     Image,
     KeepTogether,
-    PageBreak,
     PageTemplate,
     Paragraph,
     Spacer,
@@ -184,13 +183,23 @@ def build_styles() -> dict[str, ParagraphStyle]:
             "Reference",
             parent=base["BodyText"],
             fontName="ReportCN",
-            fontSize=8.2,
-            leading=13,
+            fontSize=7.5,
+            leading=10.5,
             textColor=INK,
             leftIndent=5 * mm,
             firstLineIndent=-5 * mm,
             wordWrap="CJK",
-            spaceAfter=1.4 * mm,
+            spaceAfter=0.8 * mm,
+        ),
+        "ReferenceBlock": ParagraphStyle(
+            "ReferenceBlock",
+            parent=base["BodyText"],
+            fontName="ReportCN",
+            fontSize=6.9,
+            leading=9.6,
+            textColor=INK,
+            wordWrap="CJK",
+            spaceAfter=0,
         ),
     }
 
@@ -384,7 +393,6 @@ def add_method(story, styles, manifest: dict) -> None:
     protocol = manifest["protocol"]
     story.extend(
         [
-            PageBreak(),
             Paragraph("2 数据与实验方法", styles["Heading1"]),
             Paragraph("2.1 数据构造与评价设置", styles["Heading2"]),
             p(
@@ -463,7 +471,6 @@ def add_overall_results(story, styles, rows: list[dict]) -> None:
         )
     story.extend(
         [
-            PageBreak(),
             Paragraph("3 总体结果", styles["Heading1"]),
             p(
                 "表 2 汇总六个配置的最终测试准确率。B→B 普遍高于 A→A，说明固定居中数据的"
@@ -501,7 +508,6 @@ def add_model_comparison(story, styles, rows: list[dict]) -> None:
     vit_drop = accuracy(rows, "vit_p16_conv", 2) - accuracy(rows, "vit_p16_conv", 4)
     story.extend(
         [
-            PageBreak(),
             Paragraph("4 对比一：MLP、CNN 与 ViT", styles["Heading1"]),
             figure(
                 FIGURES_DIR / "model_comparison.png",
@@ -539,7 +545,6 @@ def add_model_comparison(story, styles, rows: list[dict]) -> None:
 def add_patch_size(story, styles, rows: list[dict]) -> None:
     story.extend(
         [
-            PageBreak(),
             Paragraph("5 对比二：ViT Patch 尺度", styles["Heading1"]),
             figure(
                 FIGURES_DIR / "patch_size_comparison.png",
@@ -592,7 +597,6 @@ def add_patch_embedding(story, styles, rows: list[dict]) -> None:
     ]
     story.extend(
         [
-            PageBreak(),
             Paragraph("6 对比三：Patch Embedding 实现", styles["Heading1"]),
             figure(
                 FIGURES_DIR / "patch_embedding_comparison.png",
@@ -636,20 +640,15 @@ def add_patch_embedding(story, styles, rows: list[dict]) -> None:
 def add_discussion(story, styles) -> None:
     story.extend(
         [
-            PageBreak(),
             Paragraph("7 讨论", styles["Heading1"]),
             Paragraph("7.1 三组结果的共同指向", styles["Heading2"]),
             p(
                 "三组比较共同表明，位置泛化的主要困难不是固定位置样本本身的分类，而是训练分布"
                 "是否覆盖测试时可能出现的位置。B→B 中所有模型都取得较高准确率，但这一结果不能"
                 "预测 B→A。CNN 的局部参数共享改善了跨位置复用，仍无法替代随机位置训练。对 ViT "
-                "而言，增加 token 数也没有自动解决位置泛化；patch size 4 的结果反而下降。"
-            , styles),
-            p(
-                "A→B 通常接近或略高于 A→A，说明随机平移训练包含了中心位置所需的视觉模式。"
-                "这与数据增强的基本作用一致：训练分布扩大后，模型面对较窄的测试分布不困难；"
-                "反向从窄分布迁移到宽分布则缺少必要样本。若课程后续需要提高 B→A，更直接的方向"
-                "是平移增强、相对位置编码或显式平移不变设计，而不是只增加参数量。",
+                "而言，增加 token 数也没有自动解决位置泛化。A→B 接近 A→A，则说明随机平移训练"
+                "能够覆盖中心位置。若继续提高 B→A，更直接的方向是平移增强、相对位置编码或显式"
+                "平移不变设计，而不是只增加参数量。",
                 styles,
             ),
             Paragraph("7.2 与同学项目的外部参考", styles["Heading2"]),
@@ -680,7 +679,6 @@ def add_discussion(story, styles) -> None:
 def add_conclusion(story, styles) -> None:
     story.extend(
         [
-            PageBreak(),
             Paragraph("8 结论与复现说明", styles["Heading1"]),
             p(
                 "在统一实验协议下，CNN 是三类结构中表现最好的配置：四项准确率均为最高，且 "
@@ -692,54 +690,32 @@ def add_conclusion(story, styles) -> None:
                 "ViT 的 patch size 8 在本实验中取得更好的精度—成本折中。patch size 4 产生 "
                 "256 个 token，训练时间增加到 8.93 分钟，却未获得准确率收益。Conv2d 与 "
                 "Flatten+Linear patch embedding 的最大准确率差异为 0.61 个百分点，且两者在"
-                "非重叠 patch 条件下具有等价的线性表达，本次结果不支持其中一种稳定优于另一种。",
+                "非重叠 patch 条件下具有等价的线性表达，本次结果不支持其中一种稳定优于另一种。"
+                "对该任务，训练位置覆盖范围比单纯增加 token 数更关键；后续应优先增加随机种子，"
+                "并评估相对位置编码或平移增强。",
                 styles,
             ),
             p(
-                "对该任务，训练位置分布的覆盖范围比单纯增加 token 数更关键。若继续实验，优先级"
-                "应是多随机种子复现实验，以及相对位置编码或平移增强；前者用于量化不确定性，后者"
-                "直接针对 B→A 的分布偏移。",
+                "<b>复现：</b>结构化提交包包含代码、指标和核心图表，不含原始数据与 checkpoint。"
+                "解压并安装依赖后，运行 <font name='Courier'>python VERIFY.py</font> 可检查"
+                "文件结构、正式指标、8 项单元测试和命令行入口。",
                 styles,
+                "BodyNoIndent",
             ),
-            Paragraph("复现说明", styles["Heading2"]),
+            Paragraph("参考资料", styles["Heading2"]),
             p(
-                "完整代码、配置、测试、指标文件、训练历史和绘图结果另附于结构化 ZIP。ZIP 不含"
-                "原始数据和模型 checkpoint；解压后安装 requirements.txt，可先运行 "
-                "<font name='Courier'>python -m unittest discover -s tests -v</font>，再运行 "
-                "<font name='Courier'>python -m experiments.comparisons.run --help</font> 检查"
-                "命令行入口。正式实验配置记录在 results/comparisons/manifest.json。",
-                styles,
-            ),
-            Paragraph("参考文献", styles["Heading1"]),
-            p(
-                "[1] Xiao H., Rasul K., Vollgraf R. Fashion-MNIST: a Novel Image Dataset "
-                "for Benchmarking Machine Learning Algorithms. arXiv:1708.07747, 2017.",
-                styles,
-                "Reference",
-            ),
-            p(
-                "[2] Dosovitskiy A., Beyer L., Kolesnikov A., et al. An Image is Worth "
-                "16×16 Words: Transformers for Image Recognition at Scale. ICLR, 2021.",
-                styles,
-                "Reference",
-            ),
-            p(
-                "[3] LeCun Y., Bottou L., Bengio Y., Haffner P. Gradient-Based Learning "
-                "Applied to Document Recognition. Proceedings of the IEEE, 1998.",
-                styles,
-                "Reference",
-            ),
-            p(
-                "[4] 课程材料：《位置可变的 FashionMNIST 数据生成》《人工神经网络》"
-                "《实验实现》《关于作业与实验报告》，2026。",
-                styles,
-                "Reference",
-            ),
-            p(
-                "[5] kicious/translated-fashion-mnist-vit, commit "
+                "<b>[1]</b> Xiao H., Rasul K., Vollgraf R. Fashion-MNIST: a Novel Image "
+                "Dataset for Benchmarking Machine Learning Algorithms. arXiv:1708.07747, "
+                "2017.<br/>"
+                "<b>[2]</b> Dosovitskiy A., Beyer L., Kolesnikov A., et al. An Image is "
+                "Worth 16×16 Words: Transformers for Image Recognition at Scale. ICLR, "
+                "2021.<br/>"
+                "<b>[3]</b> 课程材料：《位置可变的 FashionMNIST 数据生成》《人工神经网络》"
+                "《实验实现》《关于作业与实验报告》，2026。<br/>"
+                "<b>[4]</b> kicious/translated-fashion-mnist-vit, commit "
                 "943fa7b68730bc8ea7786bb41c7b8dc1d488883a.",
                 styles,
-                "Reference",
+                "ReferenceBlock",
             ),
         ]
     )

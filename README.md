@@ -122,14 +122,14 @@ python -m experiments.comparisons.run \
 [reports/comparison_study.pdf](reports/comparison_study.pdf)。报告采用精简论文式结构，
 只讨论三组对比；代码附件与报告分开提交。
 
-生成结构化代码附件：
+生成助教验收用提交包：
 
 ```bash
 python tools/build_code_archive.py
 ```
 
-压缩包只收录复现实验所需源码、测试、指标、训练历史和图表，不包含原始数据、
-checkpoint、缓存文件或报告 PDF。
+压缩包以 `README_FIRST.md` 为唯一入口，包含报告、正式指标、5 幅核心图、复现实验
+源码和一键验收脚本；不包含原始数据、checkpoint 或缓存文件。
 
 ## 数据与版本控制
 

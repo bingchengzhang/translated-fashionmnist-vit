@@ -15,7 +15,8 @@ settings per configuration.
 
 - `metrics.csv` contains the 24 final test measurements.
 - `training_history.csv` contains all 12 fifteen-epoch histories.
-- `manifest.json` records the protocol, package versions, and hardware.
+- `manifest.json` records the protocol, optimization method, package versions,
+  and hardware.
 - `figures/` contains one figure per comparison.
 
 Raw checkpoints and per-fit folders are intentionally excluded. The committed

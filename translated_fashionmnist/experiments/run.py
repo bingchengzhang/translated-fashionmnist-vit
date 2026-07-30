@@ -147,6 +147,12 @@ def main() -> None:
         "fit_count": len(history_rows) // protocol.epochs,
         "evaluation_count": len(all_rows),
         "protocol": asdict(protocol),
+        "method": {
+            "loss": "cross-entropy",
+            "optimizer": "AdamW",
+            "scheduler": "cosine annealing",
+            "checkpoint": "highest validation accuracy",
+        },
         "environment": {
             "python": platform.python_version(),
             "torch": torch.__version__,

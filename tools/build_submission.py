@@ -188,8 +188,10 @@ def validate_manifest(path: Path) -> None:
     manifest = json.loads(path.read_text(encoding="utf-8"))
     if set(manifest.get("configurations", [])) != FORMAL_CONFIG_IDS:
         raise ValueError("Manifest does not describe the six formal configurations.")
-    if not {"protocol", "environment"}.issubset(manifest):
-        raise ValueError("Manifest is missing protocol or environment details.")
+    if manifest.get("fit_count") != 12 or manifest.get("evaluation_count") != 24:
+        raise ValueError("Manifest must record 12 fits and 24 evaluations.")
+    if not {"protocol", "method", "environment"}.issubset(manifest):
+        raise ValueError("Manifest is missing protocol, method, or environment details.")
 
 
 def validate_report(path: Path) -> int:

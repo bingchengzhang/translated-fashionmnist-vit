@@ -119,6 +119,7 @@ translated_fashionmnist/
 |-- models.py               MLP, CNN, ViT, and patch projections
 |-- engine.py               shared training and evaluation steps
 |-- utils.py                seeds and result serialization
+|-- visualize.py            paired A/B dataset examples
 `-- experiments/
     |-- config.py           six comparison definitions
     |-- protocol.py         common fit/evaluate protocol

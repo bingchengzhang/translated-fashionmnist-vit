@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import csv
 import json
 import pickle
 import time
@@ -44,7 +45,7 @@ from .config import (
 @dataclass
 class ProtocolConfig:
     data_dir: str = "data"
-    output_dir: str = "results"
+    output_dir: str = "outputs/comparison"
     canvas_size: int = 64
     epochs: int = 15
     batch_size: int = 64
@@ -181,12 +182,33 @@ def _can_resume(run_dir: Path, expected_metadata: dict) -> bool:
     metadata_path = run_dir / "metadata.json"
     checkpoint_path = run_dir / "best.pt"
     result_path = run_dir / "training_result.json"
-    if not all(path.is_file() for path in (metadata_path, checkpoint_path, result_path)):
+    history_path = run_dir / "history.csv"
+    if not all(
+        path.is_file()
+        for path in (metadata_path, checkpoint_path, result_path, history_path)
+    ):
         return False
     try:
         existing = json.loads(metadata_path.read_text(encoding="utf-8"))
         result = json.loads(result_path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
+        with history_path.open(newline="", encoding="utf-8") as handle:
+            history = list(csv.DictReader(handle))
+        expected_epochs = int(expected_metadata["protocol"]["epochs"])
+        required_history_fields = {
+            "epoch",
+            "learning_rate",
+            "train_loss",
+            "train_accuracy",
+            "val_loss",
+            "val_accuracy",
+        }
+        complete_history = (
+            bool(history)
+            and required_history_fields.issubset(history[0])
+            and [int(row["epoch"]) for row in history]
+            == list(range(1, expected_epochs + 1))
+        )
+    except (OSError, KeyError, TypeError, ValueError, json.JSONDecodeError):
         return False
     required_result_keys = {
         "best_epoch",
@@ -209,7 +231,7 @@ def _can_resume(run_dir: Path, expected_metadata: dict) -> bool:
         **expected_metadata,
         "protocol": expected_protocol,
     }
-    return existing_experiment == portable_expected
+    return complete_history and existing_experiment == portable_expected
 
 
 def fit_model(

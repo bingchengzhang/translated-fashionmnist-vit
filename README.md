@@ -119,8 +119,17 @@ python -m experiments.comparisons.run \
 [对比实验说明](experiments/comparisons/README.md)。
 
 最终对比实验报告见
-[reports/comparison_study.pdf](reports/comparison_study.pdf)，正文仅讨论三组对比，
-关键代码列在报告附录。
+[reports/comparison_study.pdf](reports/comparison_study.pdf)。报告采用精简论文式结构，
+只讨论三组对比；代码附件与报告分开提交。
+
+生成结构化代码附件：
+
+```bash
+python tools/build_code_archive.py
+```
+
+压缩包只收录复现实验所需源码、测试、指标、训练历史和图表，不包含原始数据、
+checkpoint、缓存文件或报告 PDF。
 
 ## 数据与版本控制
 

@@ -9,4 +9,5 @@ python reports/build_comparison_report.py
 ```
 
 报告中的数值和图表分别来自 `results/comparisons/metrics.csv` 与
-`results/comparisons/figures/`；关键代码附录从最终仓库源码读取，避免报告与代码版本不一致。
+`results/comparisons/figures/`。报告不附大段源码；结构化代码附件由
+`tools/build_code_archive.py` 单独生成。

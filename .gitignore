@@ -9,6 +9,8 @@ outputs/
 checkpoints/
 *.pt
 *.pth
+results_smoke/
+dist/
 
 # Environments and editors
 .venv/

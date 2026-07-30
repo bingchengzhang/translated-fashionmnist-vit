@@ -13,9 +13,9 @@ from torch.utils.data import DataLoader, Dataset, Subset, random_split
 from torchvision import datasets as tv_datasets
 from torchvision import transforms
 
-from datasets import TranslatedFashionMNIST
-from models import VisionTransformer, count_trainable_parameters
-from utils import (
+from .data import TranslatedFashionMNIST
+from .models import VisionTransformer, count_trainable_parameters
+from .common import (
     AverageMeter,
     plot_history,
     resolve_device,

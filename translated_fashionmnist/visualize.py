@@ -9,7 +9,7 @@ import matplotlib.patches as patches
 import matplotlib.pyplot as plt
 from torchvision import datasets, transforms
 
-from datasets import TranslatedFashionMNIST
+from .data import TranslatedFashionMNIST
 
 
 def create_parser() -> argparse.ArgumentParser:

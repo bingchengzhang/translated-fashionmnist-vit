@@ -6,8 +6,7 @@ import torch
 from torch import nn
 from torch.utils.data import Dataset
 
-from datasets import TranslatedFashionMNIST
-from models import VisionTransformer
+from translated_fashionmnist import TranslatedFashionMNIST, VisionTransformer
 
 
 class DummyFashionMNIST(Dataset):

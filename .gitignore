@@ -10,6 +10,7 @@ checkpoints/
 *.pt
 *.pth
 results_smoke/
+results/runs/
 dist/
 
 # Environments and editors

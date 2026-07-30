@@ -1,8 +1,9 @@
-"""Run the three controlled comparison groups and generate report figures."""
+"""Run the controlled study and write a complete, self-contained record."""
 
 from __future__ import annotations
 
 import argparse
+import csv
 import platform
 from dataclasses import asdict
 from pathlib import Path
@@ -13,8 +14,18 @@ import torchvision
 
 from ..utils import save_json, write_csv
 from .config import GROUPS, configuration_ids_for_groups
-from .protocol import ProtocolConfig, run_configuration
 from .plots import generate_visualizations
+from .protocol import ProtocolConfig, run_configuration
+
+
+HISTORY_FIELDS = (
+    "epoch",
+    "learning_rate",
+    "train_loss",
+    "train_accuracy",
+    "val_loss",
+    "val_accuracy",
+)
 
 
 def create_parser() -> argparse.ArgumentParser:
@@ -28,7 +39,8 @@ def create_parser() -> argparse.ArgumentParser:
     parser.add_argument("--data-dir", default="data")
     parser.add_argument(
         "--output-dir",
-        default="results",
+        default="outputs/comparison",
+        help="Run directory. The committed results/ record is never overwritten by default.",
     )
     parser.add_argument("--epochs", type=int, default=15)
     parser.add_argument("--batch-size", type=int, default=64)
@@ -50,6 +62,42 @@ def create_parser() -> argparse.ArgumentParser:
     parser.add_argument("--limit-val-samples", type=int, default=0)
     parser.add_argument("--limit-test-samples", type=int, default=0)
     return parser
+
+
+def consolidate_training_history(
+    output_dir: str | Path,
+    configuration_ids: list[str],
+    epochs: int,
+) -> list[dict[str, object]]:
+    """Merge per-fit histories into the record consumed by the report."""
+    root = Path(output_dir)
+    rows: list[dict[str, object]] = []
+    for config_id in configuration_ids:
+        for train_mode in ("A", "B"):
+            history_path = (
+                root / "runs" / config_id / f"train_{train_mode}" / "history.csv"
+            )
+            if not history_path.is_file():
+                raise FileNotFoundError(f"Missing training history: {history_path}")
+            with history_path.open(newline="", encoding="utf-8") as handle:
+                records = list(csv.DictReader(handle))
+            if not records or not set(HISTORY_FIELDS).issubset(records[0]):
+                raise ValueError(f"Incomplete training history: {history_path}")
+            observed_epochs = [int(record["epoch"]) for record in records]
+            if observed_epochs != list(range(1, epochs + 1)):
+                raise ValueError(
+                    f"Expected epochs 1..{epochs} in {history_path}, got {observed_epochs}."
+                )
+            rows.extend(
+                {
+                    "config_id": config_id,
+                    "train_mode": train_mode,
+                    **{field: record[field] for field in HISTORY_FIELDS},
+                }
+                for record in records
+            )
+    write_csv(rows, root / "training_history.csv")
+    return rows
 
 
 def main() -> None:
@@ -88,10 +136,16 @@ def main() -> None:
     all_rows.sort(key=lambda row: (selected.index(row["config_id"]), row["setting"]))
     results_csv = output_dir / "metrics.csv"
     write_csv(all_rows, results_csv)
+    history_rows = consolidate_training_history(
+        output_dir,
+        selected,
+        protocol.epochs,
+    )
     manifest = {
-        "author": "bc",
         "groups": args.groups,
         "configurations": selected,
+        "fit_count": len(history_rows) // protocol.epochs,
+        "evaluation_count": len(all_rows),
         "protocol": asdict(protocol),
         "environment": {
             "python": platform.python_version(),
@@ -115,6 +169,7 @@ def main() -> None:
         figures_dir=output_dir / "figures",
     )
     print(f"Results: {results_csv.resolve()}")
+    print(f"Training history: {(output_dir / 'training_history.csv').resolve()}")
     print(f"Figures: {(output_dir / 'figures').resolve()}")
 
 

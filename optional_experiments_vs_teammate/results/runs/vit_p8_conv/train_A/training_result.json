@@ -1,0 +1,9 @@
+{
+  "config_id": "vit_p8_conv",
+  "train_mode": "A",
+  "best_epoch": 15,
+  "best_val_accuracy": 0.8081666666666667,
+  "elapsed_seconds": 218.80592846870422,
+  "parameter_count": 811402,
+  "checkpoint": "optional_experiments_vs_teammate/results/runs/vit_p8_conv/train_A/best.pt"
+}

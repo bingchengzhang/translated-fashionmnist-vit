@@ -1,0 +1,16 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ipynb_checkpoints/
+
+# Local datasets and experiment artifacts
+data/
+outputs/
+checkpoints/
+*.pt
+*.pth
+
+# Environments and editors
+.venv/
+.idea/
+.vscode/

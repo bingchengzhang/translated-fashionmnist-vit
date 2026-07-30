@@ -1,11 +1,11 @@
-"""Build the four-page English comparison report."""
+"""Build the five-page English comparison report."""
 
 from __future__ import annotations
 
 import csv
 from pathlib import Path
 
-from reportlab.graphics.shapes import Drawing, Line, Rect, String
+from reportlab.graphics.shapes import Circle, Drawing, Line, PolyLine, Rect, String
 from reportlab.lib import colors
 from reportlab.lib.enums import TA_CENTER, TA_LEFT
 from reportlab.lib.pagesizes import A4
@@ -28,6 +28,7 @@ from reportlab.platypus import (
 
 ROOT = Path(__file__).resolve().parents[1]
 METRICS_PATH = ROOT / "results" / "metrics.csv"
+HISTORY_PATH = ROOT / "results" / "training_history.csv"
 OUTPUT_PATH = ROOT / "reports" / "comparison_study.pdf"
 FONT_DIR = ROOT / "reports" / "fonts"
 
@@ -119,6 +120,39 @@ def load_metrics() -> dict[str, dict]:
         if set(config["train_seconds"]) != {"A", "B"}:
             raise ValueError(f"Incomplete training times for {config_id}.")
     return configs
+
+
+def load_training_history() -> dict[tuple[str, str], list[dict[str, float]]]:
+    """Load and validate the 12 recorded 15-epoch training histories."""
+    histories: dict[tuple[str, str], list[dict[str, float]]] = {}
+    seen: set[tuple[str, str, int]] = set()
+    with HISTORY_PATH.open(newline="", encoding="utf-8") as handle:
+        for row in csv.DictReader(handle):
+            key = (row["config_id"], row["train_mode"])
+            epoch = int(row["epoch"])
+            record_key = (*key, epoch)
+            if record_key in seen:
+                raise ValueError(f"Duplicate history row: {record_key}")
+            seen.add(record_key)
+            histories.setdefault(key, []).append(
+                {
+                    "epoch": epoch,
+                    "train_accuracy": 100 * float(row["train_accuracy"]),
+                    "val_accuracy": 100 * float(row["val_accuracy"]),
+                }
+            )
+    expected_keys = {
+        (config_id, mode)
+        for config_id in REPORT_CONFIG_IDS
+        for mode in ("A", "B")
+    }
+    if set(histories) != expected_keys or len(seen) != 180:
+        raise ValueError("Expected 12 complete 15-epoch training histories.")
+    for key, records in histories.items():
+        records.sort(key=lambda record: record["epoch"])
+        if [record["epoch"] for record in records] != list(range(1, 16)):
+            raise ValueError(f"Non-contiguous history for {key}.")
+    return histories
 
 
 def build_styles() -> dict[str, ParagraphStyle]:
@@ -322,14 +356,6 @@ def build_styles() -> dict[str, ParagraphStyle]:
             firstLineIndent=-2.5 * mm,
             spaceAfter=1.1 * mm,
         ),
-        "Code": ParagraphStyle(
-            "Code",
-            parent=base["Code"],
-            fontName="SourceSans-Semibold",
-            fontSize=8.2,
-            leading=10.8,
-            textColor=NAVY,
-        ),
     }
 
 
@@ -430,25 +456,35 @@ def side_note(text: str, style_map) -> Table:
     )
 
 
-def chart_block(drawing: Drawing, caption: str, style_map) -> KeepTogether:
-    return KeepTogether([drawing, Paragraph(caption, style_map["Caption"])])
-
-
-def command_box(command: str, style_map) -> Table:
+def finding_strip(
+    entries: list[tuple[str, str, str]],
+    style_map,
+) -> Table:
+    """Create a compact row of evidence cards."""
     return Table(
-        [[Paragraph(command, style_map["Code"])]],
-        colWidths=[164 * mm],
+        [
+            [Paragraph(label, style_map["FindingLabel"]) for label, _, _ in entries],
+            [Paragraph(value, style_map["FindingValue"]) for _, value, _ in entries],
+            [Paragraph(note, style_map["FindingText"]) for _, _, note in entries],
+        ],
+        colWidths=[164 * mm / len(entries)] * len(entries),
         style=TableStyle(
             [
                 ("BACKGROUND", (0, 0), (-1, -1), PALE_BLUE),
-                ("BOX", (0, 0), (-1, -1), 0.55, colors.HexColor("#BAD0D5")),
-                ("LEFTPADDING", (0, 0), (-1, -1), 9),
-                ("RIGHTPADDING", (0, 0), (-1, -1), 9),
-                ("TOPPADDING", (0, 0), (-1, -1), 7),
-                ("BOTTOMPADDING", (0, 0), (-1, -1), 7),
+                ("LINEABOVE", (0, 0), (-1, 0), 0.55, colors.HexColor("#BAD0D5")),
+                ("LINEBELOW", (0, -1), (-1, -1), 0.55, colors.HexColor("#BAD0D5")),
+                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                ("TOPPADDING", (0, 0), (-1, 0), 6),
+                ("TOPPADDING", (0, 1), (-1, 1), 2),
+                ("BOTTOMPADDING", (0, 1), (-1, 1), 1),
+                ("BOTTOMPADDING", (0, 2), (-1, 2), 6),
             ]
         ),
     )
+
+
+def chart_block(drawing: Drawing, caption: str, style_map) -> KeepTogether:
+    return KeepTogether([drawing, Paragraph(caption, style_map["Caption"])])
 
 
 def make_dataset_geometry() -> Drawing:
@@ -568,6 +604,129 @@ def make_dataset_geometry() -> Drawing:
         line_one="top-left coordinate (18,18)",
         line_two="one fixed location",
     )
+    return drawing
+
+
+def make_training_curve_chart(
+    histories: dict[tuple[str, str], list[dict[str, float]]],
+) -> Drawing:
+    """Plot validation accuracy for the three architecture baselines."""
+    drawing = Drawing(164 * mm, 88 * mm)
+    series = (
+        ("mlp", "MLP", GRAY),
+        ("cnn", "CNN", ACCENT),
+        ("vit_p8_conv", "ViT / 8", BLUE),
+    )
+    for index, (_, label, color) in enumerate(series):
+        legend_x = 139 + index * 70
+        drawing.add(
+            Line(
+                legend_x,
+                239,
+                legend_x + 17,
+                239,
+                strokeColor=color,
+                strokeWidth=2.1,
+            )
+        )
+        drawing.add(
+            String(
+                legend_x + 22,
+                236.5,
+                label,
+                fontName="SourceSans",
+                fontSize=7.3,
+                fillColor=MUTED,
+            )
+        )
+
+    for mode, left in (("A", 37), ("B", 269)):
+        bottom, plot_width, plot_height = 36, 159, 164
+        drawing.add(
+            String(
+                left + plot_width / 2,
+                218,
+                f"Validation accuracy - train {mode}",
+                fontName="SourceSans-Semibold",
+                fontSize=9.3,
+                fillColor=NAVY,
+                textAnchor="middle",
+            )
+        )
+        for accuracy in (0, 25, 50, 75, 100):
+            y = bottom + plot_height * accuracy / 100
+            drawing.add(
+                Line(
+                    left,
+                    y,
+                    left + plot_width,
+                    y,
+                    strokeColor=RULE,
+                    strokeWidth=0.4,
+                )
+            )
+            drawing.add(
+                String(
+                    left - 7,
+                    y - 2.2,
+                    str(accuracy),
+                    fontName="SourceSans",
+                    fontSize=6.8,
+                    fillColor=MUTED,
+                    textAnchor="end",
+                )
+            )
+        for epoch in (1, 5, 10, 15):
+            x = left + plot_width * (epoch - 1) / 14
+            drawing.add(
+                String(
+                    x,
+                    21,
+                    str(epoch),
+                    fontName="SourceSans",
+                    fontSize=6.8,
+                    fillColor=MUTED,
+                    textAnchor="middle",
+                )
+            )
+        drawing.add(
+            String(
+                left + plot_width / 2,
+                7,
+                "epoch",
+                fontName="SourceSans",
+                fontSize=6.8,
+                fillColor=MUTED,
+                textAnchor="middle",
+            )
+        )
+        for config_id, _, color in series:
+            points = [
+                (
+                    left + plot_width * (record["epoch"] - 1) / 14,
+                    bottom + plot_height * record["val_accuracy"] / 100,
+                )
+                for record in histories[(config_id, mode)]
+            ]
+            drawing.add(
+                PolyLine(
+                    points,
+                    strokeColor=color,
+                    strokeWidth=1.7,
+                    fillColor=None,
+                )
+            )
+            final_x, final_y = points[-1]
+            drawing.add(
+                Circle(
+                    final_x,
+                    final_y,
+                    2.1,
+                    fillColor=color,
+                    strokeColor=colors.white,
+                    strokeWidth=0.4,
+                )
+            )
     return drawing
 
 
@@ -823,7 +982,11 @@ def accuracy_table(data: dict[str, dict], config_ids, labels, style_map) -> Tabl
     )
 
 
-def build_story(data: dict[str, dict], style_map) -> list:
+def build_story(
+    data: dict[str, dict],
+    histories: dict[tuple[str, str], list[dict[str, float]]],
+    style_map,
+) -> list:
     protocol_table = ruled_table(
         [
             [
@@ -903,13 +1066,74 @@ def build_story(data: dict[str, dict], style_map) -> list:
         compact=True,
     )
 
+    model_ids = ("mlp", "cnn", "vit_p8_conv")
+    model_labels = ("MLP", "CNN", "ViT, patch 8")
+    model_display = dict(zip(model_ids, model_labels))
     architecture_table = accuracy_table(
         data,
-        ("mlp", "cnn", "vit_p8_conv"),
-        ("MLP", "CNN", "ViT, patch 8"),
+        model_ids,
+        model_labels,
         style_map,
     )
-    model_ids = ("mlp", "cnn", "vit_p8_conv")
+    best_validation_rows = [
+        [
+            Paragraph("Configuration", style_map["TableHeader"]),
+            Paragraph("Train A", style_map["TableHeader"]),
+            Paragraph("Train B", style_map["TableHeader"]),
+        ]
+    ]
+    best_validation_epochs: list[int] = []
+    best_validation_by_run: dict[tuple[str, str], dict[str, float]] = {}
+    for config_id, label in zip(model_ids, model_labels):
+        cells = [Paragraph(label, style_map["TableCell"])]
+        for mode in ("A", "B"):
+            best = max(
+                histories[(config_id, mode)],
+                key=lambda record: record["val_accuracy"],
+            )
+            best_validation_by_run[(config_id, mode)] = best
+            best_validation_epochs.append(int(best["epoch"]))
+            cells.append(
+                Paragraph(
+                    f"{best['val_accuracy']:.2f}% (epoch {int(best['epoch'])})",
+                    style_map["TableCellCenter"],
+                )
+            )
+        best_validation_rows.append(cells)
+    best_validation_table = ruled_table(
+        best_validation_rows,
+        [54 * mm, 55 * mm, 55 * mm],
+    )
+    highest_validation_run = max(
+        best_validation_by_run,
+        key=lambda key: best_validation_by_run[key]["val_accuracy"],
+    )
+    highest_validation = best_validation_by_run[highest_validation_run]["val_accuracy"]
+    mlp_validation_gap = (
+        best_validation_by_run[("mlp", "B")]["val_accuracy"]
+        - best_validation_by_run[("mlp", "A")]["val_accuracy"]
+    )
+    training_findings = finding_strip(
+        [
+            (
+                "SELECTED EPOCHS",
+                f"{min(best_validation_epochs)}-{max(best_validation_epochs)}",
+                "all six architecture fits",
+            ),
+            (
+                "BEST VALIDATION",
+                f"{highest_validation:.2f}%",
+                f"{model_display[highest_validation_run[0]]} / train "
+                f"{highest_validation_run[1]}",
+            ),
+            (
+                "LARGEST A/B GAP",
+                f"{mlp_validation_gap:.2f} pp",
+                "MLP validation",
+            ),
+        ],
+        style_map,
+    )
     random_to_center_max_change = max(
         abs(
             data[config_id]["accuracy"][("A", "B")]
@@ -931,40 +1155,21 @@ def build_story(data: dict[str, dict], style_map) -> list:
         cnn_hard_accuracy - data["vit_p8_conv"]["accuracy"][("B", "A")]
     )
 
-    findings = Table(
+    findings = finding_strip(
         [
-            [
-                Paragraph("B -> A LEADER", style_map["FindingLabel"]),
-                Paragraph("SMALLEST B -> A DROP", style_map["FindingLabel"]),
-                Paragraph("A -> B CHANGE", style_map["FindingLabel"]),
-            ],
-            [
-                Paragraph(f"{cnn_hard_accuracy:.2f}%", style_map["FindingValue"]),
-                Paragraph(f"{hard_drop_min:.2f} pp", style_map["FindingValue"]),
-                Paragraph(
-                    f"{random_to_center_max_change:.2f} pp max",
-                    style_map["FindingValue"],
-                ),
-            ],
-            [
-                Paragraph("CNN", style_map["FindingText"]),
-                Paragraph("CNN, relative to B -> B", style_map["FindingText"]),
-                Paragraph("all three architectures", style_map["FindingText"]),
-            ],
+            ("B -> A LEADER", f"{cnn_hard_accuracy:.2f}%", "CNN"),
+            (
+                "SMALLEST B -> A DROP",
+                f"{hard_drop_min:.2f} pp",
+                "CNN, relative to B -> B",
+            ),
+            (
+                "A -> B CHANGE",
+                f"{random_to_center_max_change:.2f} pp max",
+                "all three architectures",
+            ),
         ],
-        colWidths=[54.67 * mm] * 3,
-        style=TableStyle(
-            [
-                ("BACKGROUND", (0, 0), (-1, -1), PALE_BLUE),
-                ("LINEABOVE", (0, 0), (-1, 0), 0.55, colors.HexColor("#BAD0D5")),
-                ("LINEBELOW", (0, -1), (-1, -1), 0.55, colors.HexColor("#BAD0D5")),
-                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-                ("TOPPADDING", (0, 0), (-1, 0), 6),
-                ("TOPPADDING", (0, 1), (-1, 1), 2),
-                ("BOTTOMPADDING", (0, 1), (-1, 1), 1),
-                ("BOTTOMPADDING", (0, 2), (-1, 2), 6),
-            ]
-        ),
+        style_map,
     )
 
     patch_rows = [
@@ -1094,6 +1299,67 @@ def build_story(data: dict[str, dict], style_map) -> list:
         ),
     )
 
+    analysis_table = ruled_table(
+        [
+            [
+                Paragraph("Comparison", style_map["TableHeader"]),
+                Paragraph("Observed evidence", style_map["TableHeader"]),
+                Paragraph("Interpretation", style_map["TableHeader"]),
+            ],
+            [
+                Paragraph("Architecture", style_map["TableCellStrong"]),
+                Paragraph(
+                    f"CNN leads all four settings; B -> A = {cnn_hard_accuracy:.2f}%",
+                    style_map["TableCell"],
+                ),
+                Paragraph(
+                    "Local shared filters are a plausible advantage, but architecture "
+                    "and parameter count are not independently controlled.",
+                    style_map["TableCell"],
+                ),
+            ],
+            [
+                Paragraph("Position support", style_map["TableCellStrong"]),
+                Paragraph(
+                    f"A -> B changes at most {random_to_center_max_change:.2f} pp; "
+                    f"B -> A loses {hard_drop_min:.2f}-{hard_drop_max:.2f} pp",
+                    style_map["TableCell"],
+                ),
+                Paragraph(
+                    "Training on broad position support transfers to center; "
+                    "center-only training does not cover random positions.",
+                    style_map["TableCell"],
+                ),
+            ],
+            [
+                Paragraph("Patch scale", style_map["TableCellStrong"]),
+                Paragraph(
+                    "Patch 8 leads three settings; patch 16 is fastest; "
+                    "patch 4 uses 256 tokens",
+                    style_map["TableCell"],
+                ),
+                Paragraph(
+                    "Patch 8 gives the strongest accuracy-cost balance under the "
+                    "shared 15-epoch budget.",
+                    style_map["TableCell"],
+                ),
+            ],
+            [
+                Paragraph("Patch embedding", style_map["TableCellStrong"]),
+                Paragraph(
+                    f"Maximum Conv2d vs Linear gap = {embedding_gap_max:.2f} pp",
+                    style_map["TableCell"],
+                ),
+                Paragraph(
+                    "Equivalent affine projections produce numerically close results; "
+                    "the remaining gap is not a significance claim.",
+                    style_map["TableCell"],
+                ),
+            ],
+        ],
+        [31 * mm, 57 * mm, 76 * mm],
+    )
+
     limitations = Table(
         [
             [
@@ -1131,89 +1397,6 @@ def build_story(data: dict[str, dict], style_map) -> list:
                 ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
             ]
         ),
-    )
-
-    reproducibility = ruled_table(
-        [
-            [
-                Paragraph("Check", style_map["TableHeader"]),
-                Paragraph("Recorded value", style_map["TableHeader"]),
-            ],
-            [
-                Paragraph("Code", style_map["TableCell"]),
-                Paragraph("translated_fashionmnist/experiments", style_map["TableCell"]),
-            ],
-            [
-                Paragraph("Metrics", style_map["TableCell"]),
-                Paragraph("results/metrics.csv", style_map["TableCell"]),
-            ],
-            [
-                Paragraph("Design", style_map["TableCell"]),
-                Paragraph(
-                    "12 fits, 24 test evaluations; seed 42; 15 epochs",
-                    style_map["TableCell"],
-                ),
-            ],
-            [
-                Paragraph("Dependency lock", style_map["TableCell"]),
-                Paragraph("requirements-lock.txt", style_map["TableCell"]),
-            ],
-            [
-                Paragraph("Environment", style_map["TableCell"]),
-                Paragraph(
-                    "Python 3.12.13, PyTorch 2.11.0, CUDA 12.8",
-                    style_map["TableCell"],
-                ),
-            ],
-            [
-                Paragraph("Hardware", style_map["TableCell"]),
-                Paragraph("NVIDIA GeForce RTX 5070 Laptop GPU", style_map["TableCell"]),
-            ],
-        ],
-        [40 * mm, 124 * mm],
-        compact=True,
-    )
-
-    implementation = ruled_table(
-        [
-            [
-                Paragraph("Component", style_map["TableHeader"]),
-                Paragraph("Location", style_map["TableHeader"]),
-                Paragraph("Role", style_map["TableHeader"]),
-            ],
-            [
-                Paragraph("Dataset", style_map["TableCell"]),
-                Paragraph("data.py", style_map["TableCell"]),
-                Paragraph("load, split, and construct A/B canvases", style_map["TableCell"]),
-            ],
-            [
-                Paragraph("Models", style_map["TableCell"]),
-                Paragraph("models.py", style_map["TableCell"]),
-                Paragraph("MLP, CNN, ViT, patch embeddings", style_map["TableCell"]),
-            ],
-            [
-                Paragraph("Protocol", style_map["TableCell"]),
-                Paragraph("experiments/protocol.py", style_map["TableCell"]),
-                Paragraph("train, validate, and evaluate", style_map["TableCell"]),
-            ],
-            [
-                Paragraph("Engine", style_map["TableCell"]),
-                Paragraph("engine.py", style_map["TableCell"]),
-                Paragraph("shared training and evaluation primitives", style_map["TableCell"]),
-            ],
-            [
-                Paragraph("Runner", style_map["TableCell"]),
-                Paragraph("experiments/compare.py", style_map["TableCell"]),
-                Paragraph("execute all three comparison groups", style_map["TableCell"]),
-            ],
-            [
-                Paragraph("Outputs", style_map["TableCell"]),
-                Paragraph("results/", style_map["TableCell"]),
-                Paragraph("metrics, history, and figures", style_map["TableCell"]),
-            ],
-        ],
-        [31 * mm, 57 * mm, 76 * mm],
-        compact=True,
     )
 
     abstract = side_note(
@@ -1263,7 +1446,7 @@ def build_story(data: dict[str, dict], style_map) -> list:
             style_map["Body"],
         ),
         protocol_table,
-        section_header("2", "Controlled protocol", style_map),
+        section_header("2", "Experimental process", style_map),
         Paragraph(
             "Each of six configurations is fitted once on A and once on B. Validation "
             "selects the checkpoint; both test distributions are then measured on the "
@@ -1287,29 +1470,57 @@ def build_story(data: dict[str, dict], style_map) -> list:
         ),
         PageBreak(),
         *page_heading(
+            "EXPERIMENTAL PROCESS",
+            "Learning Curves and Checkpoints",
+            "Validation behavior for the three architecture baselines over 15 epochs",
+            style_map,
+        ),
+        section_header("3", "Training dynamics", style_map),
+        chart_block(
+            make_training_curve_chart(histories),
+            "Figure 2. Validation accuracy for A-trained and B-trained architecture baselines.",
+            style_map,
+        ),
+        best_validation_table,
+        Spacer(1, 2.5 * mm),
+        Paragraph(
+            "Table 1. Best validation accuracy and selected checkpoint epoch.",
+            style_map["Caption"],
+        ),
+        side_note(
+            f"<b>Checkpoint evidence.</b> Every selected checkpoint occurs at epoch "
+            f"{min(best_validation_epochs)} or {max(best_validation_epochs)}. CNN gives "
+            "the strongest validation accuracy on both position distributions; all three "
+            "models validate higher on the centered distribution.",
+            style_map,
+        ),
+        Spacer(1, 4 * mm),
+        training_findings,
+        PageBreak(),
+        *page_heading(
             "MODEL COMPARISON",
             "Architecture and Position Shift",
             "MLP (2 x 128), CNN (5 conv layers), and ViT (d=128, L=4, H=4, p=8)",
             style_map,
         ),
-        section_header("3", "Accuracy", style_map),
+        section_header("4", "Architecture results", style_map),
         architecture_table,
         Spacer(1, 2.5 * mm),
         Paragraph(
-            "Table 1. Top-1 test accuracy (%); teal values mark column leaders.",
+            "Table 2. Top-1 test accuracy (%); teal values mark column leaders.",
             style_map["Caption"],
         ),
         chart_block(
             make_hard_transfer_chart(data),
-            f"Figure 2. CNN reaches {cnn_hard_accuracy:.2f}% on B -> A, "
+            f"Figure 3. CNN reaches {cnn_hard_accuracy:.2f}% on B -> A, "
             f"{cnn_advantage:.2f} points above patch-8 ViT.",
             style_map,
         ),
         findings,
-        section_header("4", "Effect of the position shift", style_map),
+        section_header("5", "Position-shift analysis", style_map),
         chart_block(
             make_shift_chart(data),
-            f"Figure 3. Centered-only training loses {hard_drop_min:.2f}-"
+            f"Figure 4. Centered-only training loses {hard_drop_min:.2f}-"
             f"{hard_drop_max:.2f} points under random-position testing.",
             style_map,
         ),
@@ -1320,16 +1531,16 @@ def build_story(data: dict[str, dict], style_map) -> list:
             "ViT body fixed at d=128, depth 4, four heads, and FFN width 512",
             style_map,
         ),
-        section_header("5", "Patch scale", style_map),
+        section_header("6", "Patch-scale results", style_map),
         chart_block(
             make_patch_chart(data),
-            "Figure 4. Patch size 8 leads three of four evaluated settings.",
+            "Figure 5. Patch size 8 leads three of four evaluated settings.",
             style_map,
         ),
         patch_table,
         Spacer(1, 2.5 * mm),
         Paragraph(
-            "Table 2. Accuracy (%) and summed training time; teal marks leaders and fastest time.",
+            "Table 3. Accuracy (%) and summed training time; teal marks leaders and fastest time.",
             style_map["Caption"],
         ),
         side_note(
@@ -1338,7 +1549,7 @@ def build_story(data: dict[str, dict], style_map) -> list:
             "accuracy gain.",
             style_map,
         ),
-        section_header("6", "Patch embedding", style_map),
+        section_header("7", "Patch-embedding results", style_map),
         Paragraph(
             "For non-overlapping patches, Conv2d with kernel = stride = p and a shared "
             "Linear layer on each flattened p x p patch implement the same affine map "
@@ -1348,30 +1559,30 @@ def build_story(data: dict[str, dict], style_map) -> list:
         embedding_table,
         Spacer(1, 2.5 * mm),
         Paragraph(
-            f"Table 3. Test accuracy (%) for patch size 16. Maximum absolute gap: "
+            f"Table 4. Test accuracy (%) for patch size 16. Maximum absolute gap: "
             f"{embedding_gap_max:.2f} points.",
             style_map["Caption"],
         ),
         PageBreak(),
         *page_heading(
-            "DISCUSSION",
-            "Conclusions and Reproducibility",
-            "Concise interpretation and a documented reproduction path",
+            "EXPERIMENTAL ANALYSIS",
+            "Integrated Findings",
+            "Evidence-based interpretation with explicit limits",
             style_map,
         ),
-        section_header("7", "Conclusions", style_map),
+        section_header("8", "Results and interpretation", style_map),
+        analysis_table,
+        Spacer(1, 3 * mm),
+        side_note(
+            "<b>Main answer.</b> High centered-position accuracy does not imply translation "
+            "robustness. Exposure to varied positions during training is the decisive "
+            "difference between the two transfer directions in this experiment.",
+            style_map,
+        ),
+        section_header("9", "Conclusions", style_map),
         conclusions,
-        section_header("8", "Limitations", style_map),
+        section_header("10", "Limitations", style_map),
         limitations,
-        section_header("9", "Reproducibility", style_map),
-        reproducibility,
-        Spacer(1, 2 * mm),
-        command_box(
-            "python -m translated_fashionmnist.experiments.compare --groups all --download",
-            style_map,
-        ),
-        section_header("10", "Implementation map", style_map),
-        implementation,
     ]
     return story
 
@@ -1379,9 +1590,10 @@ def build_story(data: dict[str, dict], style_map) -> list:
 def build() -> Path:
     register_fonts()
     data = load_metrics()
+    histories = load_training_history()
     style_map = build_styles()
     OUTPUT_PATH.parent.mkdir(parents=True, exist_ok=True)
-    ReportDocument(str(OUTPUT_PATH)).build(build_story(data, style_map))
+    ReportDocument(str(OUTPUT_PATH)).build(build_story(data, histories, style_map))
     return OUTPUT_PATH
 
 

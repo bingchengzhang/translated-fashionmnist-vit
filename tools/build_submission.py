@@ -21,7 +21,7 @@ This archive contains the controlled comparison study.
 
 Read the files in this order:
 
-1. REPORT.pdf - four-page experimental report.
+1. REPORT.pdf - five-page experimental report.
 2. RESULTS.csv - all 24 formal test measurements.
 3. SOURCE_CODE.zip - unified Python package and tests.
 

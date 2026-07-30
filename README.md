@@ -41,7 +41,7 @@ translated_fashionmnist/
     ├── protocol.py         common comparison protocol
     └── plots.py            report figures
 results/                    metrics, training history, and figures
-reports/                    four-page report and its build script
+reports/                    five-page report and its build script
 tests/                      dataset, model, and protocol checks
 tools/                      compact submission builder
 ```

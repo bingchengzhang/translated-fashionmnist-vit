@@ -18,20 +18,21 @@ under A -> A, B -> B, A -> B, and B -> A.
 
 The CNN is strongest in all four settings. Among the ViTs, patch size 8 gives
 the most balanced result. Conv2d and Flatten + Linear patch embeddings differ
-by no more than 0.61 percentage points.
+by no more than 0.61 percentage points in this run. These are single-seed
+results; small differences are not treated as statistically significant.
 
 ## Repository layout
 
 ```text
 translated_fashionmnist/
-├── data.py                 translated-canvas dataset
+├── data.py                 loading, fixed split, loaders, and A/B canvases
 ├── engine.py               shared training and evaluation loop
 ├── models.py               MLP, CNN, ViT, and patch embeddings
-├── training.py             shared ViT training pipeline
+├── training.py             single-model ViT training entry point
 ├── utils.py                reproducibility and file utilities
 ├── visualize.py            dataset preview
 └── experiments/
-    ├── baseline.py         original four-setting ViT run
+    ├── baseline.py         four-setting ViT runner
     ├── compare.py          three controlled comparison groups
     ├── config.py           experiment definitions
     ├── protocol.py         common comparison protocol
@@ -77,9 +78,11 @@ Visualize the two data distributions:
 python -m translated_fashionmnist.visualize
 ```
 
-Formal runs use seed 42, a fixed 90%/10% training-validation split, and
-validation-based checkpoint selection. The official test set is used only for
-final evaluation.
+Formal runs use seed 42, a fixed 54,000/6,000 training-validation split, and
+validation-based checkpoint selection. Six configurations are each fitted on A
+and B, giving 12 fitted models and 24 final evaluations on the official
+10,000-image test set. Every configuration uses the same deterministic test
+placements.
 
 ## Deliverables
 

@@ -2,13 +2,93 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Literal
 
 import torch
-from torch.utils.data import Dataset
+from torch.utils.data import DataLoader, Dataset, Subset
+from torchvision import datasets as tv_datasets
+from torchvision import transforms
 from torchvision.transforms import functional as TF
 
+from .utils import seed_worker
+
 PositionMode = Literal["A", "B", "random", "center"]
+POSITION_MODES = ("A", "B")
+TRAIN_POSITION_SEED_OFFSET = 101
+VALIDATION_POSITION_SEED_OFFSET = 202
+TEST_POSITION_SEED_OFFSET = 303
+
+
+def load_fashion_mnist(
+    data_dir: str | Path,
+    download: bool = False,
+) -> tuple[Dataset, Dataset]:
+    """Load the official FashionMNIST train and test partitions."""
+    transform = transforms.ToTensor()
+    train = tv_datasets.FashionMNIST(
+        root=data_dir,
+        train=True,
+        download=download,
+        transform=transform,
+    )
+    test = tv_datasets.FashionMNIST(
+        root=data_dir,
+        train=False,
+        download=download,
+        transform=transform,
+    )
+    return train, test
+
+
+def limit_dataset(dataset: Dataset, limit: int) -> Dataset:
+    """Return a deterministic prefix for smoke runs; non-positive means no limit."""
+    if limit <= 0 or limit >= len(dataset):
+        return dataset
+    return Subset(dataset, range(limit))
+
+
+def split_train_validation(
+    dataset: Dataset,
+    val_fraction: float,
+    seed: int,
+    train_limit: int = 0,
+    val_limit: int = 0,
+) -> tuple[Dataset, Dataset]:
+    """Create one deterministic, disjoint train/validation split."""
+    if not 0 < val_fraction < 1:
+        raise ValueError("val_fraction must be between 0 and 1.")
+    val_size = round(len(dataset) * val_fraction)
+    if val_size == 0 or val_size == len(dataset):
+        raise ValueError("dataset is too small for the requested validation split.")
+    generator = torch.Generator().manual_seed(seed)
+    order = torch.randperm(len(dataset), generator=generator).tolist()
+    validation = Subset(dataset, order[:val_size])
+    train = Subset(dataset, order[val_size:])
+    return limit_dataset(train, train_limit), limit_dataset(validation, val_limit)
+
+
+def create_data_loader(
+    dataset: Dataset,
+    *,
+    batch_size: int,
+    num_workers: int,
+    seed: int,
+    shuffle: bool,
+    pin_memory: bool,
+) -> DataLoader:
+    """Build a seeded loader with consistent worker behavior."""
+    generator = torch.Generator().manual_seed(seed)
+    return DataLoader(
+        dataset,
+        batch_size=batch_size,
+        shuffle=shuffle,
+        num_workers=num_workers,
+        pin_memory=pin_memory,
+        persistent_workers=num_workers > 0,
+        worker_init_fn=seed_worker,
+        generator=generator,
+    )
 
 
 def normalize_mode(mode: PositionMode | str) -> Literal["A", "B"]:

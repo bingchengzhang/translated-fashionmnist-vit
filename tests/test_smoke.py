@@ -7,6 +7,7 @@ from torch import nn
 from torch.utils.data import DataLoader, Dataset, TensorDataset
 
 from translated_fashionmnist import TranslatedFashionMNIST, VisionTransformer
+from translated_fashionmnist.data import split_train_validation
 from translated_fashionmnist.engine import evaluate, train_epoch
 
 
@@ -84,6 +85,29 @@ class DatasetTests(unittest.TestCase):
         dataset = TranslatedFashionMNIST(DummyFashionMNIST())
         with self.assertRaises(ValueError):
             dataset.set_epoch(-1)
+
+    def test_split_is_deterministic_and_disjoint(self):
+        first_train, first_validation = split_train_validation(
+            DummyFashionMNIST(),
+            val_fraction=0.25,
+            seed=42,
+        )
+        second_train, second_validation = split_train_validation(
+            DummyFashionMNIST(),
+            val_fraction=0.25,
+            seed=42,
+        )
+        self.assertEqual(first_train.indices, second_train.indices)
+        self.assertEqual(first_validation.indices, second_validation.indices)
+        self.assertFalse(set(first_train.indices) & set(first_validation.indices))
+        self.assertEqual(
+            set(first_train.indices) | set(first_validation.indices),
+            set(range(len(DummyFashionMNIST()))),
+        )
+
+    def test_split_rejects_empty_partition(self):
+        with self.assertRaises(ValueError):
+            split_train_validation(DummyFashionMNIST(), val_fraction=0.01, seed=42)
 
 
 class ModelTests(unittest.TestCase):

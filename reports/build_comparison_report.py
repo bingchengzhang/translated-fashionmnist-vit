@@ -44,6 +44,14 @@ PALE_BLUE = colors.HexColor("#EEF4F5")
 
 SETTINGS = ("A -> A", "B -> B", "A -> B", "B -> A")
 SETTING_KEYS = (("A", "A"), ("B", "B"), ("A", "B"), ("B", "A"))
+REPORT_CONFIG_IDS = {
+    "mlp",
+    "cnn",
+    "vit_p16_conv",
+    "vit_p8_conv",
+    "vit_p4_conv",
+    "vit_p16_linear",
+}
 
 
 def register_fonts() -> None:
@@ -77,8 +85,15 @@ def register_fonts() -> None:
 
 def load_metrics() -> dict[str, dict]:
     configs: dict[str, dict] = {}
+    seen: set[tuple[str, str, str]] = set()
+    row_count = 0
     with METRICS_PATH.open(newline="", encoding="utf-8") as handle:
         for row in csv.DictReader(handle):
+            row_count += 1
+            key = (row["config_id"], row["train_mode"], row["test_mode"])
+            if key in seen:
+                raise ValueError(f"Duplicate metric row: {key}")
+            seen.add(key)
             config = configs.setdefault(
                 row["config_id"],
                 {
@@ -88,11 +103,21 @@ def load_metrics() -> dict[str, dict]:
                     "accuracy": {},
                 },
             )
-            key = (row["train_mode"], row["test_mode"])
-            config["accuracy"][key] = 100 * float(row["test_accuracy"])
+            setting = (row["train_mode"], row["test_mode"])
+            accuracy = 100 * float(row["test_accuracy"])
+            if not 0 <= accuracy <= 100:
+                raise ValueError(f"Accuracy outside [0, 100]: {key}")
+            config["accuracy"][setting] = accuracy
             config["train_seconds"][row["train_mode"]] = float(
                 row["train_elapsed_seconds"]
             )
+    if row_count != 24 or set(configs) != REPORT_CONFIG_IDS:
+        raise ValueError("Expected six configurations and 24 metric rows.")
+    for config_id, config in configs.items():
+        if set(config["accuracy"]) != set(SETTING_KEYS):
+            raise ValueError(f"Incomplete settings for {config_id}.")
+        if set(config["train_seconds"]) != {"A", "B"}:
+            raise ValueError(f"Incomplete training times for {config_id}.")
     return configs
 
 
@@ -232,6 +257,15 @@ def build_styles() -> dict[str, ParagraphStyle]:
             alignment=TA_CENTER,
             textColor=NAVY,
         ),
+        "TableCellBest": ParagraphStyle(
+            "TableCellBest",
+            parent=base["Normal"],
+            fontName="SourceSans-Semibold",
+            fontSize=8.15,
+            leading=10.3,
+            alignment=TA_CENTER,
+            textColor=ACCENT,
+        ),
         "Caption": ParagraphStyle(
             "Caption",
             parent=base["Normal"],
@@ -291,10 +325,10 @@ def build_styles() -> dict[str, ParagraphStyle]:
         "Code": ParagraphStyle(
             "Code",
             parent=base["Code"],
-            fontName="Courier",
-            fontSize=7.5,
-            leading=10.2,
-            textColor=INK,
+            fontName="SourceSans-Semibold",
+            fontSize=8.2,
+            leading=10.8,
+            textColor=NAVY,
         ),
     }
 
@@ -398,6 +432,143 @@ def side_note(text: str, style_map) -> Table:
 
 def chart_block(drawing: Drawing, caption: str, style_map) -> KeepTogether:
     return KeepTogether([drawing, Paragraph(caption, style_map["Caption"])])
+
+
+def command_box(command: str, style_map) -> Table:
+    return Table(
+        [[Paragraph(command, style_map["Code"])]],
+        colWidths=[164 * mm],
+        style=TableStyle(
+            [
+                ("BACKGROUND", (0, 0), (-1, -1), PALE_BLUE),
+                ("BOX", (0, 0), (-1, -1), 0.55, colors.HexColor("#BAD0D5")),
+                ("LEFTPADDING", (0, 0), (-1, -1), 9),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 9),
+                ("TOPPADDING", (0, 0), (-1, -1), 7),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 7),
+            ]
+        ),
+    )
+
+
+def make_dataset_geometry() -> Drawing:
+    """Explain the only distributional change in the experiment."""
+    width, height = 164 * mm, 33 * mm
+    panel_width = 79 * mm
+    drawing = Drawing(width, height)
+
+    def add_panel(
+        x: float,
+        *,
+        mode: str,
+        title: str,
+        object_offset: tuple[float, float],
+        line_one: str,
+        line_two: str,
+    ) -> None:
+        drawing.add(
+            Rect(
+                x,
+                0,
+                panel_width,
+                height,
+                rx=4,
+                ry=4,
+                fillColor=PALE,
+                strokeColor=RULE,
+                strokeWidth=0.55,
+            )
+        )
+        canvas_x, canvas_y, canvas_size = x + 10, 10, 72
+        drawing.add(
+            Rect(
+                canvas_x,
+                canvas_y,
+                canvas_size,
+                canvas_size,
+                fillColor=colors.HexColor("#1C252C"),
+                strokeColor=NAVY,
+                strokeWidth=0.6,
+            )
+        )
+        object_x = canvas_x + object_offset[0]
+        object_y = canvas_y + object_offset[1]
+        drawing.add(
+            Rect(
+                object_x,
+                object_y,
+                31.5,
+                31.5,
+                rx=3,
+                ry=3,
+                fillColor=colors.HexColor("#DCE3E7"),
+                strokeColor=colors.white,
+                strokeWidth=0.45,
+            )
+        )
+        drawing.add(
+            Line(
+                object_x + 6,
+                object_y + 17,
+                object_x + 25.5,
+                object_y + 17,
+                strokeColor=GRAY,
+                strokeWidth=1.3,
+            )
+        )
+        drawing.add(
+            String(
+                x + 95,
+                79,
+                f"MODE {mode}",
+                fontName="SourceSans-Semibold",
+                fontSize=7.6,
+                fillColor=ACCENT,
+            )
+        )
+        drawing.add(
+            String(
+                x + 95,
+                62,
+                title,
+                fontName="SourceSerif-Semibold",
+                fontSize=12,
+                fillColor=INK,
+            )
+        )
+        for y, line, size in (
+            (40, line_one, 7.6),
+            (26, line_two, 7.6),
+            (12, "28 x 28 object / 64 x 64 canvas", 7.1),
+        ):
+            drawing.add(
+                String(
+                    x + 95,
+                    y,
+                    line,
+                    fontName="SourceSans",
+                    fontSize=size,
+                    fillColor=MUTED,
+                )
+            )
+
+    add_panel(
+        0,
+        mode="A",
+        title="Random position",
+        object_offset=(31, 8),
+        line_one="top-left x,y in {0,...,36}",
+        line_two="37 x 37 = 1,369 locations",
+    )
+    add_panel(
+        85 * mm,
+        mode="B",
+        title="Centered",
+        object_offset=(20.25, 20.25),
+        line_one="top-left coordinate (18,18)",
+        line_two="one fixed location",
+    )
+    return drawing
 
 
 def add_axes(
@@ -616,6 +787,10 @@ def page_heading(kicker: str, title: str, subtitle: str, style_map) -> list:
 
 
 def accuracy_table(data: dict[str, dict], config_ids, labels, style_map) -> Table:
+    best_by_setting = {
+        key: max(data[config_id]["accuracy"][key] for config_id in config_ids)
+        for key in SETTING_KEYS
+    }
     rows = [
         [
             Paragraph("Configuration", style_map["TableHeader"]),
@@ -632,7 +807,11 @@ def accuracy_table(data: dict[str, dict], config_ids, labels, style_map) -> Tabl
                 *[
                     Paragraph(
                         f"{config['accuracy'][key]:.2f}",
-                        style_map["TableCellCenter"],
+                        (
+                            style_map["TableCellBest"]
+                            if config["accuracy"][key] == best_by_setting[key]
+                            else style_map["TableCellCenter"]
+                        ),
                     )
                     for key in SETTING_KEYS
                 ],
@@ -689,15 +868,24 @@ def build_story(data: dict[str, dict], style_map) -> list:
             ],
             [
                 Paragraph("Data", style_map["TableCell"]),
-                Paragraph("FashionMNIST on a 64 x 64 black canvas", style_map["TableCell"]),
+                Paragraph(
+                    "28 x 28 FashionMNIST image on a 64 x 64 black canvas",
+                    style_map["TableCell"],
+                ),
             ],
             [
                 Paragraph("Split", style_map["TableCell"]),
-                Paragraph("90% train, 10% validation; official test set held out", style_map["TableCell"]),
+                Paragraph(
+                    "54,000 train, 6,000 validation; official 10,000-image test set held out",
+                    style_map["TableCell"],
+                ),
             ],
             [
                 Paragraph("Training", style_map["TableCell"]),
-                Paragraph("15 epochs, AdamW, seed 42", style_map["TableCell"]),
+                Paragraph(
+                    "15 epochs; batch 64; AdamW, lr 1e-3, weight decay 1e-4",
+                    style_map["TableCell"],
+                ),
             ],
             [
                 Paragraph("Selection", style_map["TableCell"]),
@@ -705,7 +893,10 @@ def build_story(data: dict[str, dict], style_map) -> list:
             ],
             [
                 Paragraph("Reporting", style_map["TableCell"]),
-                Paragraph("test accuracy and elapsed training time", style_map["TableCell"]),
+                Paragraph(
+                    "top-1 test accuracy; elapsed training time; seed 42",
+                    style_map["TableCell"],
+                ),
             ],
         ],
         [34 * mm, 130 * mm],
@@ -763,22 +954,46 @@ def build_story(data: dict[str, dict], style_map) -> list:
             Paragraph("Time", style_map["TableHeader"]),
         ]
     ]
-    for patch, config_id, tokens in (
+    patch_specs = (
         (4, "vit_p4_conv", 256),
         (8, "vit_p8_conv", 64),
         (16, "vit_p16_conv", 16),
-    ):
+    )
+    patch_best = {
+        key: max(data[config_id]["accuracy"][key] for _, config_id, _ in patch_specs)
+        for key in SETTING_KEYS
+    }
+    patch_times = {
+        config_id: sum(data[config_id]["train_seconds"].values()) / 60
+        for _, config_id, _ in patch_specs
+    }
+    fastest_time = min(patch_times.values())
+    for patch, config_id, tokens in patch_specs:
         config = data[config_id]
-        elapsed = sum(config["train_seconds"].values()) / 60
+        elapsed = patch_times[config_id]
         patch_rows.append(
             [
                 Paragraph(str(patch), style_map["TableCellStrong"]),
                 Paragraph(str(tokens), style_map["TableCellCenter"]),
                 *[
-                    Paragraph(f"{config['accuracy'][key]:.2f}", style_map["TableCellCenter"])
+                    Paragraph(
+                        f"{config['accuracy'][key]:.2f}",
+                        (
+                            style_map["TableCellBest"]
+                            if config["accuracy"][key] == patch_best[key]
+                            else style_map["TableCellCenter"]
+                        ),
+                    )
                     for key in SETTING_KEYS
                 ],
-                Paragraph(f"{elapsed:.2f} min", style_map["TableCellCenter"]),
+                Paragraph(
+                    f"{elapsed:.2f} min",
+                    (
+                        style_map["TableCellBest"]
+                        if elapsed == fastest_time
+                        else style_map["TableCellCenter"]
+                    ),
+                ),
             ]
         )
     patch_table = ruled_table(
@@ -901,8 +1116,11 @@ def build_story(data: dict[str, dict], style_map) -> list:
                 Paragraph("results/metrics.csv", style_map["TableCell"]),
             ],
             [
-                Paragraph("Seed / epochs", style_map["TableCell"]),
-                Paragraph("42 / 15", style_map["TableCell"]),
+                Paragraph("Design", style_map["TableCell"]),
+                Paragraph(
+                    "12 fits, 24 test evaluations; seed 42; 15 epochs",
+                    style_map["TableCell"],
+                ),
             ],
             [
                 Paragraph("Dependency lock", style_map["TableCell"]),
@@ -934,7 +1152,7 @@ def build_story(data: dict[str, dict], style_map) -> list:
             [
                 Paragraph("Dataset", style_map["TableCell"]),
                 Paragraph("data.py", style_map["TableCell"]),
-                Paragraph("construct A and B canvases", style_map["TableCell"]),
+                Paragraph("load, split, and construct A/B canvases", style_map["TableCell"]),
             ],
             [
                 Paragraph("Models", style_map["TableCell"]),
@@ -968,15 +1186,16 @@ def build_story(data: dict[str, dict], style_map) -> list:
 
     abstract = side_note(
         "<i>Abstract.</i> We test whether image classifiers retain accuracy when object "
-        "position changes between training and testing. Under one shared training recipe, "
-        "CNN records the highest accuracy and reaches 35.40% on the hardest fixed-to-random "
-        "transfer. Patch size 8 leads three of four ViT settings. Equivalent Conv2d and "
-        "Flatten + Linear projections remain within 0.61 percentage points in this run.",
+        "position changes between training and testing. Across six configurations and one "
+        "shared training recipe, CNN records the highest accuracy and reaches 35.40% on the "
+        "hardest fixed-to-random transfer. Patch size 8 leads three of four ViT settings. "
+        "Equivalent Conv2d and Flatten + Linear projections remain within 0.61 percentage "
+        "points in this run.",
         style_map,
     )
 
     story = [
-        Paragraph("COURSE PROJECT · COMPARISON STUDY", style_map["Kicker"]),
+        Paragraph("COURSE PROJECT / COMPARISON STUDY", style_map["Kicker"]),
         Paragraph("Position Generalization in<br/>Translated FashionMNIST", style_map["Title"]),
         Paragraph(
             "Architecture, patch scale, and patch embedding",
@@ -986,7 +1205,7 @@ def build_story(data: dict[str, dict], style_map) -> list:
             [
                 [
                     Paragraph("Final English report", style_map["Meta"]),
-                    Paragraph("Controlled experiments · seed 42", style_map["Meta"]),
+                    Paragraph("12 fitted models / 24 test evaluations", style_map["Meta"]),
                 ]
             ],
             colWidths=[82 * mm, 82 * mm],
@@ -1007,15 +1226,16 @@ def build_story(data: dict[str, dict], style_map) -> list:
         section_header("1", "Question", style_map),
         Paragraph(
             "A classifier may learn class appearance and object location together. "
-            "This study isolates the effect of location by comparing random-position "
-            "images (A) with centered images (B).",
+            "We isolate location by placing the same 28 x 28 object either uniformly "
+            "over all valid integer positions (A) or at the canvas center (B).",
             style_map["Body"],
         ),
         protocol_table,
         section_header("2", "Controlled protocol", style_map),
         Paragraph(
-            "Each configuration trains one model on A and one on B. Validation chooses "
-            "the checkpoint; the official test set is evaluated only after selection.",
+            "Each of six configurations is fitted once on A and once on B. Validation "
+            "selects the checkpoint; both A and B test sets are then measured, producing "
+            "12 fits and 24 final test evaluations.",
             style_map["Body"],
         ),
         controls_table,
@@ -1024,6 +1244,13 @@ def build_story(data: dict[str, dict], style_map) -> list:
             "<b>Primary measure.</b> B -> A is the hardest setting because a model "
             "trained only on centered objects must classify objects across the canvas.",
             style_map,
+        ),
+        Spacer(1, 3 * mm),
+        make_dataset_geometry(),
+        Paragraph(
+            "Figure 1. Mode A placements are deterministic per sample and seed; the same "
+            "test placement seed is used for every configuration.",
+            style_map["Caption"],
         ),
         PageBreak(),
         *page_heading(
@@ -1036,19 +1263,19 @@ def build_story(data: dict[str, dict], style_map) -> list:
         architecture_table,
         Spacer(1, 2.5 * mm),
         Paragraph(
-            "Table 1. Test accuracy (%). The best value in every column belongs to CNN.",
+            "Table 1. Top-1 test accuracy (%); teal values mark column leaders.",
             style_map["Caption"],
         ),
         chart_block(
             make_hard_transfer_chart(data),
-            "Figure 1. CNN retains substantially more accuracy on B -> A.",
+            "Figure 2. CNN retains substantially more accuracy on B -> A.",
             style_map,
         ),
         findings,
         section_header("4", "Effect of the position shift", style_map),
         chart_block(
             make_shift_chart(data),
-            "Figure 2. All models degrade after centered training is tested at random positions.",
+            "Figure 3. All models degrade after centered training is tested at random positions.",
             style_map,
         ),
         PageBreak(),
@@ -1061,13 +1288,13 @@ def build_story(data: dict[str, dict], style_map) -> list:
         section_header("5", "Patch scale", style_map),
         chart_block(
             make_patch_chart(data),
-            "Figure 3. Patch size 8 leads three of four evaluated settings.",
+            "Figure 4. Patch size 8 leads three of four evaluated settings.",
             style_map,
         ),
         patch_table,
         Spacer(1, 2.5 * mm),
         Paragraph(
-            "Table 2. Accuracy (%) and total time for the A- and B-trained models.",
+            "Table 2. Accuracy (%) and summed training time; teal marks leaders and fastest time.",
             style_map["Caption"],
         ),
         side_note(
@@ -1078,8 +1305,9 @@ def build_story(data: dict[str, dict], style_map) -> list:
         ),
         section_header("6", "Patch embedding", style_map),
         Paragraph(
-            "For non-overlapping patches, a strided Conv2d and a shared linear layer "
-            "perform the same type of patch-wise projection. Their results remain close.",
+            "For non-overlapping patches, Conv2d with kernel = stride = p and a shared "
+            "Linear layer on each flattened p x p patch implement the same affine map "
+            "when their weights are aligned. Their trained results remain close.",
             style_map["Body"],
         ),
         embedding_table,
@@ -1102,9 +1330,9 @@ def build_story(data: dict[str, dict], style_map) -> list:
         section_header("9", "Reproducibility", style_map),
         reproducibility,
         Spacer(1, 2 * mm),
-        Paragraph(
+        command_box(
             "python -m translated_fashionmnist.experiments.compare --groups all --download",
-            style_map["Code"],
+            style_map,
         ),
         section_header("10", "Implementation map", style_map),
         implementation,

@@ -6,7 +6,7 @@ from typing import Protocol
 
 import torch
 from torch import nn
-from torch.utils.data import DataLoader, Dataset, Subset
+from torch.utils.data import DataLoader
 
 from .utils import AverageMeter
 
@@ -18,13 +18,6 @@ class TrainingSettings(Protocol):
     weight_decay: float
     val_fraction: float
     num_workers: int
-
-
-def limit_dataset(dataset: Dataset, limit: int) -> Dataset:
-    """Return a deterministic prefix for smoke runs; non-positive means no limit."""
-    if limit <= 0 or limit >= len(dataset):
-        return dataset
-    return Subset(dataset, range(limit))
 
 
 def validate_training_settings(settings: TrainingSettings) -> None:

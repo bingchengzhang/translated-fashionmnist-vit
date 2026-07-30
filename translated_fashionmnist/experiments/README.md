@@ -13,12 +13,14 @@ comparison groups.
 
 Dataset A uses random object positions; dataset B uses centered objects. Each
 configuration trains one model on A and one on B, then evaluates both models on
-both test distributions.
+both test distributions. Across six unique configurations, the formal study
+therefore contains 12 fits and 24 final test measurements.
 
 ## Protocol
 
-- 90%/10% fixed training-validation split
-- 15 epochs and seed 42 for formal runs
+- fixed 54,000/6,000 training-validation split
+- 15 epochs, batch size 64, AdamW, learning rate 1e-3, weight decay 1e-4
+- seed 42, with shared deterministic test placements across configurations
 - best checkpoint selected by validation accuracy
 - official test set used only for final evaluation
 - A -> A, B -> B, A -> B, and B -> A reported for every configuration

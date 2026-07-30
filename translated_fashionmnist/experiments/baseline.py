@@ -9,6 +9,7 @@ from pathlib import Path
 
 import torch
 
+from ..data import POSITION_MODES
 from ..engine import evaluate
 from ..training import (
     add_training_arguments,
@@ -16,6 +17,7 @@ from ..training import (
     run_training,
 )
 from ..utils import save_json, write_csv
+from .config import SETTING_ORDER
 
 
 def create_parser() -> argparse.ArgumentParser:
@@ -61,14 +63,14 @@ def main() -> None:
 
     # Train exactly two models. Each model is evaluated on both official test
     # distributions, producing the four requested settings without duplicate training.
-    for train_mode in ("A", "B"):
+    for train_mode in POSITION_MODES:
         train_args = copy.deepcopy(args)
         train_args.train_mode = train_mode
         train_args.val_mode = train_mode
         train_args.output_dir = str(root_output / f"train_{train_mode}")
         model, device, criterion, training_result = run_training(train_args)
 
-        for test_mode in ("A", "B"):
+        for test_mode in POSITION_MODES:
             test_loader = create_test_loader(train_args, test_mode)
             metrics = evaluate(model, test_loader, criterion, device)
             measured[(train_mode, test_mode)] = {
@@ -91,14 +93,8 @@ def main() -> None:
             torch.cuda.empty_cache()
 
     # Keep the setting numbers identical to the assignment handout.
-    ordered_settings = [
-        (1, "A", "A"),
-        (2, "B", "B"),
-        (3, "A", "B"),
-        (4, "B", "A"),
-    ]
     rows: list[dict[str, object]] = []
-    for setting, train_mode, test_mode in ordered_settings:
+    for setting, train_mode, test_mode in SETTING_ORDER:
         rows.append(
             {
                 "setting": setting,

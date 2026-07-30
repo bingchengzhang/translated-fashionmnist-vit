@@ -9,19 +9,25 @@ from types import SimpleNamespace
 
 import torch
 from torch import nn
-from torch.utils.data import DataLoader, random_split
-from torchvision import datasets as tv_datasets
-from torchvision import transforms
+from torch.utils.data import DataLoader
 
-from .data import TranslatedFashionMNIST
-from .engine import evaluate, limit_dataset, train_epoch, validate_training_settings
+from .data import (
+    TEST_POSITION_SEED_OFFSET,
+    TRAIN_POSITION_SEED_OFFSET,
+    VALIDATION_POSITION_SEED_OFFSET,
+    TranslatedFashionMNIST,
+    create_data_loader,
+    limit_dataset,
+    load_fashion_mnist,
+    split_train_validation,
+)
+from .engine import evaluate, train_epoch, validate_training_settings
 from .models import VisionTransformer, count_trainable_parameters
 from .utils import (
     plot_history,
     resolve_device,
     save_checkpoint,
     save_json,
-    seed_worker,
     serializable_config,
     set_seed,
     system_summary,
@@ -86,61 +92,50 @@ def create_parser() -> argparse.ArgumentParser:
 
 
 def create_base_datasets(args: argparse.Namespace | SimpleNamespace):
-    transform = transforms.ToTensor()
-    train_base = tv_datasets.FashionMNIST(
-        root=args.data_dir,
-        train=True,
-        download=args.download,
-        transform=transform,
-    )
-    test_base = tv_datasets.FashionMNIST(
-        root=args.data_dir,
-        train=False,
-        download=args.download,
-        transform=transform,
-    )
-    return train_base, test_base
+    return load_fashion_mnist(args.data_dir, download=args.download)
 
 
 def create_train_val_loaders(args: argparse.Namespace | SimpleNamespace):
     train_base, _ = create_base_datasets(args)
-    val_size = round(len(train_base) * args.val_fraction)
-    train_size = len(train_base) - val_size
-    split_generator = torch.Generator().manual_seed(args.seed)
-    train_subset, val_subset = random_split(
+    train_subset, val_subset = split_train_validation(
         train_base,
-        [train_size, val_size],
-        generator=split_generator,
+        val_fraction=args.val_fraction,
+        seed=args.seed,
+        train_limit=args.limit_train_samples,
+        val_limit=args.limit_val_samples,
     )
-    train_subset = limit_dataset(train_subset, args.limit_train_samples)
-    val_subset = limit_dataset(val_subset, args.limit_val_samples)
 
     val_mode = args.val_mode or args.train_mode
     train_dataset = TranslatedFashionMNIST(
         train_subset,
         canvas_size=args.canvas_size,
         mode=args.train_mode,
-        seed=args.seed + 100,
+        seed=args.seed + TRAIN_POSITION_SEED_OFFSET,
         resample_each_epoch=args.resample_train_positions,
     )
     val_dataset = TranslatedFashionMNIST(
         val_subset,
         canvas_size=args.canvas_size,
         mode=val_mode,
-        seed=args.seed + 200,
+        seed=args.seed + VALIDATION_POSITION_SEED_OFFSET,
     )
-
-    loader_generator = torch.Generator().manual_seed(args.seed)
     common = {
         "batch_size": args.batch_size,
         "num_workers": args.num_workers,
         "pin_memory": torch.cuda.is_available(),
-        "worker_init_fn": seed_worker,
-        "generator": loader_generator,
-        "persistent_workers": args.num_workers > 0,
     }
-    train_loader = DataLoader(train_dataset, shuffle=True, **common)
-    val_loader = DataLoader(val_dataset, shuffle=False, **common)
+    train_loader = create_data_loader(
+        train_dataset,
+        seed=args.seed + 11,
+        shuffle=True,
+        **common,
+    )
+    val_loader = create_data_loader(
+        val_dataset,
+        seed=args.seed + 12,
+        shuffle=False,
+        **common,
+    )
     return train_loader, val_loader
 
 
@@ -154,18 +149,15 @@ def create_test_loader(
         test_base,
         canvas_size=args.canvas_size,
         mode=mode,
-        seed=args.seed + 300,
+        seed=args.seed + TEST_POSITION_SEED_OFFSET,
     )
-    generator = torch.Generator().manual_seed(args.seed)
-    return DataLoader(
+    return create_data_loader(
         test_dataset,
         batch_size=args.batch_size,
-        shuffle=False,
         num_workers=args.num_workers,
+        seed=args.seed + 13,
+        shuffle=False,
         pin_memory=torch.cuda.is_available(),
-        worker_init_fn=seed_worker,
-        generator=generator,
-        persistent_workers=args.num_workers > 0,
     )
 
 

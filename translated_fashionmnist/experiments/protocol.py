@@ -10,19 +10,25 @@ from pathlib import Path
 
 import torch
 from torch import nn
-from torch.utils.data import DataLoader, Dataset, Subset
-from torchvision import datasets as tv_datasets
-from torchvision import transforms
+from torch.utils.data import DataLoader, Dataset
 
-from ..data import TranslatedFashionMNIST
-from ..engine import evaluate, limit_dataset, train_epoch, validate_training_settings
+from ..data import (
+    TEST_POSITION_SEED_OFFSET,
+    TRAIN_POSITION_SEED_OFFSET,
+    VALIDATION_POSITION_SEED_OFFSET,
+    TranslatedFashionMNIST,
+    create_data_loader,
+    limit_dataset,
+    load_fashion_mnist,
+    split_train_validation,
+)
+from ..engine import evaluate, train_epoch, validate_training_settings
 from ..models import CNNClassifier, MLPClassifier, VisionTransformer
 from ..models import count_trainable_parameters
 from ..utils import (
     plot_history,
     resolve_device,
     save_json,
-    seed_worker,
     set_seed,
     write_csv,
 )
@@ -88,31 +94,17 @@ def build_model(
 
 
 def _base_datasets(config: ProtocolConfig):
-    transform = transforms.ToTensor()
-    train = tv_datasets.FashionMNIST(
-        root=config.data_dir,
-        train=True,
-        download=config.download,
-        transform=transform,
-    )
-    test = tv_datasets.FashionMNIST(
-        root=config.data_dir,
-        train=False,
-        download=config.download,
-        transform=transform,
-    )
-    return train, test
+    return load_fashion_mnist(config.data_dir, download=config.download)
 
 
 def _split_train_validation(base_train: Dataset, config: ProtocolConfig):
-    val_size = round(len(base_train) * config.val_fraction)
-    generator = torch.Generator().manual_seed(config.seed)
-    order = torch.randperm(len(base_train), generator=generator).tolist()
-    val_indices = order[:val_size]
-    train_indices = order[val_size:]
-    train_subset = limit_dataset(Subset(base_train, train_indices), config.limit_train_samples)
-    val_subset = limit_dataset(Subset(base_train, val_indices), config.limit_val_samples)
-    return train_subset, val_subset
+    return split_train_validation(
+        base_train,
+        val_fraction=config.val_fraction,
+        seed=config.seed,
+        train_limit=config.limit_train_samples,
+        val_limit=config.limit_val_samples,
+    )
 
 
 def _loader(
@@ -122,16 +114,13 @@ def _loader(
     shuffle: bool,
     seed_offset: int,
 ) -> DataLoader:
-    generator = torch.Generator().manual_seed(config.seed + seed_offset)
-    return DataLoader(
+    return create_data_loader(
         dataset,
         batch_size=config.batch_size,
-        shuffle=shuffle,
         num_workers=config.num_workers,
+        seed=config.seed + seed_offset,
+        shuffle=shuffle,
         pin_memory=device.type == "cuda",
-        persistent_workers=config.num_workers > 0,
-        worker_init_fn=seed_worker,
-        generator=generator,
     )
 
 
@@ -146,13 +135,13 @@ def create_train_validation_loaders(
         train_subset,
         canvas_size=config.canvas_size,
         mode=train_mode,
-        seed=config.seed + 101,
+        seed=config.seed + TRAIN_POSITION_SEED_OFFSET,
     )
     val_dataset = TranslatedFashionMNIST(
         val_subset,
         canvas_size=config.canvas_size,
         mode=train_mode,
-        seed=config.seed + 202,
+        seed=config.seed + VALIDATION_POSITION_SEED_OFFSET,
     )
     return (
         _loader(train_dataset, config, device, shuffle=True, seed_offset=11),
@@ -171,7 +160,7 @@ def create_test_loader(
         base_test,
         canvas_size=config.canvas_size,
         mode=test_mode,
-        seed=config.seed + 303,
+        seed=config.seed + TEST_POSITION_SEED_OFFSET,
     )
     return _loader(test_dataset, config, device, shuffle=False, seed_offset=13)
 

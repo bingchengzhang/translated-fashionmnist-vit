@@ -72,6 +72,9 @@ SETTING_ORDER: tuple[tuple[int, str, str], ...] = (
 
 
 def configuration_ids_for_groups(groups: list[str]) -> list[str]:
+    unknown = set(groups) - (set(GROUPS) | {"all"})
+    if unknown:
+        raise ValueError(f"Unknown experiment group(s): {', '.join(sorted(unknown))}")
     selected: set[str] = set()
     if "all" in groups:
         groups = list(GROUPS)

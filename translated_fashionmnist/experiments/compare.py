@@ -12,7 +12,7 @@ import torch
 import torchvision
 
 from ..utils import save_json, write_csv
-from .config import configuration_ids_for_groups
+from .config import GROUPS, configuration_ids_for_groups
 from .protocol import ProtocolConfig, run_configuration
 from .plots import generate_visualizations
 
@@ -22,7 +22,7 @@ def create_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--groups",
         nargs="+",
-        choices=["all", "model", "patch_size", "patch_embedding"],
+        choices=["all", *GROUPS],
         default=["all"],
     )
     parser.add_argument("--data-dir", default="data")

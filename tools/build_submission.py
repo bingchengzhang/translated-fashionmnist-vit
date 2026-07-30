@@ -27,7 +27,8 @@ Read the files in this order:
 
 The study compares MLP, CNN, and ViT; ViT patch sizes 4, 8, and 16; and Conv2d
 against Flatten + Linear patch embedding. Formal runs use seed 42 and
-validation-based checkpoint selection.
+validation-based checkpoint selection. Results come from one training and
+placement seed, so small numerical differences are not significance claims.
 
 To reproduce, extract SOURCE_CODE.zip and run:
 
@@ -41,21 +42,22 @@ intentionally excluded.
 
 SOURCE_README = """# Source code
 
-The baseline and controlled comparisons share one package:
+The baseline and all controlled comparisons share one data pipeline, training
+engine, and experiment registry:
 
     translated_fashionmnist/
-        data.py
-        models.py
-        training.py
-        engine.py
+        data.py             loading, fixed split, loaders, and A/B canvases
+        engine.py           shared training and evaluation loops
+        models.py           MLP, CNN, ViT, and patch embeddings
+        training.py         single-model ViT entry point
         utils.py
         visualize.py
         experiments/
-            baseline.py
-            compare.py
-            config.py
-            protocol.py
-            plots.py
+            baseline.py     four-setting ViT runner
+            compare.py      three controlled comparison groups
+            config.py       experiment definitions
+            protocol.py     common comparison protocol
+            plots.py        comparison figures
 
 Run the tests:
 

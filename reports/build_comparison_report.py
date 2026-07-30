@@ -1,14 +1,13 @@
-"""Generate the concise Chinese comparison report."""
+"""Build the four-page English comparison report."""
 
 from __future__ import annotations
 
 import csv
-import json
 from pathlib import Path
-from xml.sax.saxutils import escape
 
+from reportlab.graphics.shapes import Drawing, Line, Rect, String
 from reportlab.lib import colors
-from reportlab.lib.enums import TA_CENTER, TA_JUSTIFY, TA_LEFT
+from reportlab.lib.enums import TA_CENTER, TA_LEFT
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import mm
@@ -17,8 +16,8 @@ from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.platypus import (
     BaseDocTemplate,
     Frame,
-    Image,
     KeepTogether,
+    PageBreak,
     PageTemplate,
     Paragraph,
     Spacer,
@@ -28,719 +27,1093 @@ from reportlab.platypus import (
 
 
 ROOT = Path(__file__).resolve().parents[1]
-RESULTS_DIR = ROOT / "results" / "comparisons"
-FIGURES_DIR = RESULTS_DIR / "figures"
+METRICS_PATH = ROOT / "results" / "comparisons" / "metrics.csv"
 OUTPUT_PATH = ROOT / "reports" / "comparison_study.pdf"
+FONT_DIR = ROOT / "reports" / "fonts"
 
-INK = colors.HexColor("#172231")
-MUTED = colors.HexColor("#596473")
-ACCENT = colors.HexColor("#244A73")
-RULE = colors.HexColor("#C7CFD9")
-PALE = colors.HexColor("#F2F5F8")
-WHITE = colors.white
+INK = colors.HexColor("#182532")
+NAVY = colors.HexColor("#23445E")
+ACCENT = colors.HexColor("#2E7485")
+BLUE = colors.HexColor("#557E9D")
+ORANGE = colors.HexColor("#C88152")
+GRAY = colors.HexColor("#A8B4BC")
+MUTED = colors.HexColor("#667480")
+RULE = colors.HexColor("#D4DCE1")
+PALE = colors.HexColor("#F5F7F8")
+PALE_BLUE = colors.HexColor("#EEF4F5")
+
+SETTINGS = ("A -> A", "B -> B", "A -> B", "B -> A")
+SETTING_KEYS = (("A", "A"), ("B", "B"), ("A", "B"), ("B", "A"))
 
 
 def register_fonts() -> None:
-    candidates = [
-        (Path(r"C:\Windows\Fonts\msyh.ttc"), Path(r"C:\Windows\Fonts\msyhbd.ttc")),
-        (Path("/mnt/c/Windows/Fonts/msyh.ttc"), Path("/mnt/c/Windows/Fonts/msyhbd.ttc")),
-    ]
-    for regular, bold in candidates:
-        if regular.exists() and bold.exists():
-            pdfmetrics.registerFont(TTFont("ReportCN", str(regular)))
-            pdfmetrics.registerFont(TTFont("ReportCN-Bold", str(bold)))
-            return
-    raise FileNotFoundError("Microsoft YaHei fonts are required.")
+    font_files = {
+        "SourceSerif": "SourceSerif4-Regular.ttf",
+        "SourceSerif-Semibold": "SourceSerif4-Semibold.ttf",
+        "SourceSerif-Italic": "SourceSerif4-It.ttf",
+        "SourceSans": "SourceSans3-Regular.ttf",
+        "SourceSans-Semibold": "SourceSans3-Semibold.ttf",
+    }
+    for name, filename in font_files.items():
+        path = FONT_DIR / filename
+        if not path.is_file():
+            raise FileNotFoundError(f"Missing report font: {path}")
+        pdfmetrics.registerFont(TTFont(name, str(path)))
+    pdfmetrics.registerFontFamily(
+        "SourceSerif",
+        normal="SourceSerif",
+        bold="SourceSerif-Semibold",
+        italic="SourceSerif-Italic",
+        boldItalic="SourceSerif-Semibold",
+    )
+    pdfmetrics.registerFontFamily(
+        "SourceSans",
+        normal="SourceSans",
+        bold="SourceSans-Semibold",
+        italic="SourceSans",
+        boldItalic="SourceSans-Semibold",
+    )
+
+
+def load_metrics() -> dict[str, dict]:
+    configs: dict[str, dict] = {}
+    with METRICS_PATH.open(newline="", encoding="utf-8") as handle:
+        for row in csv.DictReader(handle):
+            config = configs.setdefault(
+                row["config_id"],
+                {
+                    "name": row["display_name"],
+                    "parameters": int(row["parameter_count"]),
+                    "train_seconds": {},
+                    "accuracy": {},
+                },
+            )
+            key = (row["train_mode"], row["test_mode"])
+            config["accuracy"][key] = 100 * float(row["test_accuracy"])
+            config["train_seconds"][row["train_mode"]] = float(
+                row["train_elapsed_seconds"]
+            )
+    return configs
 
 
 def build_styles() -> dict[str, ParagraphStyle]:
     base = getSampleStyleSheet()
     return {
+        "Kicker": ParagraphStyle(
+            "Kicker",
+            parent=base["Normal"],
+            fontName="SourceSans-Semibold",
+            fontSize=7.5,
+            leading=9,
+            tracking=0.8,
+            textColor=ACCENT,
+            spaceAfter=4.5 * mm,
+        ),
         "Title": ParagraphStyle(
             "Title",
             parent=base["Title"],
-            fontName="ReportCN-Bold",
-            fontSize=20,
-            leading=29,
+            fontName="SourceSerif-Semibold",
+            fontSize=25.5,
+            leading=28.5,
             textColor=INK,
-            alignment=TA_CENTER,
-            spaceAfter=5 * mm,
+            alignment=TA_LEFT,
+            spaceAfter=2.4 * mm,
+        ),
+        "PageTitle": ParagraphStyle(
+            "PageTitle",
+            parent=base["Title"],
+            fontName="SourceSerif-Semibold",
+            fontSize=24,
+            leading=27,
+            textColor=INK,
+            alignment=TA_LEFT,
+            spaceAfter=2.2 * mm,
         ),
         "Subtitle": ParagraphStyle(
             "Subtitle",
             parent=base["Normal"],
-            fontName="ReportCN",
-            fontSize=9.2,
-            leading=14,
+            fontName="SourceSans",
+            fontSize=10.2,
+            leading=13.2,
             textColor=MUTED,
-            alignment=TA_CENTER,
-            spaceAfter=7 * mm,
+            spaceAfter=4 * mm,
         ),
-        "Heading1": ParagraphStyle(
-            "Heading1",
-            parent=base["Heading1"],
-            fontName="ReportCN-Bold",
-            fontSize=15,
-            leading=21,
-            textColor=ACCENT,
-            spaceBefore=2 * mm,
-            spaceAfter=3 * mm,
-            keepWithNext=True,
+        "Meta": ParagraphStyle(
+            "Meta",
+            parent=base["Normal"],
+            fontName="SourceSans",
+            fontSize=7.6,
+            leading=10,
+            textColor=MUTED,
         ),
-        "Heading2": ParagraphStyle(
-            "Heading2",
-            parent=base["Heading2"],
-            fontName="ReportCN-Bold",
-            fontSize=11.2,
-            leading=17,
-            textColor=INK,
-            spaceBefore=3 * mm,
-            spaceAfter=1.5 * mm,
-            keepWithNext=True,
+        "AbstractLabel": ParagraphStyle(
+            "AbstractLabel",
+            parent=base["Normal"],
+            fontName="SourceSerif-Italic",
+            fontSize=9.3,
+            leading=12,
+            textColor=NAVY,
+            spaceAfter=1.1 * mm,
         ),
         "Body": ParagraphStyle(
             "Body",
             parent=base["BodyText"],
-            fontName="ReportCN",
-            fontSize=9.4,
-            leading=15.2,
+            fontName="SourceSerif",
+            fontSize=9.35,
+            leading=13.5,
             textColor=INK,
-            alignment=TA_JUSTIFY,
-            firstLineIndent=18.8,
-            wordWrap="CJK",
             spaceAfter=2.2 * mm,
         ),
-        "BodyNoIndent": ParagraphStyle(
-            "BodyNoIndent",
+        "BodySmall": ParagraphStyle(
+            "BodySmall",
             parent=base["BodyText"],
-            fontName="ReportCN",
-            fontSize=9.4,
-            leading=15.2,
+            fontName="SourceSerif",
+            fontSize=8.5,
+            leading=11.8,
             textColor=INK,
-            alignment=TA_JUSTIFY,
-            wordWrap="CJK",
-            spaceAfter=2.2 * mm,
         ),
-        "Abstract": ParagraphStyle(
-            "Abstract",
-            parent=base["BodyText"],
-            fontName="ReportCN",
-            fontSize=9.1,
-            leading=14.6,
-            textColor=INK,
-            alignment=TA_JUSTIFY,
-            firstLineIndent=18.2,
-            leftIndent=7 * mm,
-            rightIndent=7 * mm,
-            wordWrap="CJK",
-            spaceAfter=2 * mm,
+        "SansSmall": ParagraphStyle(
+            "SansSmall",
+            parent=base["Normal"],
+            fontName="SourceSans",
+            fontSize=7.6,
+            leading=10.2,
+            textColor=MUTED,
         ),
-        "Bullet": ParagraphStyle(
-            "Bullet",
-            parent=base["BodyText"],
-            fontName="ReportCN",
+        "SansSmallCenter": ParagraphStyle(
+            "SansSmallCenter",
+            parent=base["Normal"],
+            fontName="SourceSans",
+            fontSize=7.6,
+            leading=10.2,
+            alignment=TA_CENTER,
+            textColor=MUTED,
+        ),
+        "MiniTitle": ParagraphStyle(
+            "MiniTitle",
+            parent=base["Normal"],
+            fontName="SourceSans-Semibold",
             fontSize=9.2,
-            leading=14.8,
+            leading=11.5,
+            textColor=NAVY,
+            spaceAfter=1.4 * mm,
+        ),
+        "TableHeader": ParagraphStyle(
+            "TableHeader",
+            parent=base["Normal"],
+            fontName="SourceSans-Semibold",
+            fontSize=7.5,
+            leading=9.4,
+            textColor=NAVY,
+        ),
+        "TableCell": ParagraphStyle(
+            "TableCell",
+            parent=base["Normal"],
+            fontName="SourceSans",
+            fontSize=7.45,
+            leading=9.4,
             textColor=INK,
-            leftIndent=6 * mm,
-            firstLineIndent=-4 * mm,
-            wordWrap="CJK",
-            spaceAfter=1.3 * mm,
+        ),
+        "TableCellCenter": ParagraphStyle(
+            "TableCellCenter",
+            parent=base["Normal"],
+            fontName="SourceSans",
+            fontSize=7.45,
+            leading=9.4,
+            alignment=TA_CENTER,
+            textColor=INK,
+        ),
+        "TableCellStrong": ParagraphStyle(
+            "TableCellStrong",
+            parent=base["Normal"],
+            fontName="SourceSans-Semibold",
+            fontSize=7.45,
+            leading=9.4,
+            alignment=TA_CENTER,
+            textColor=NAVY,
         ),
         "Caption": ParagraphStyle(
             "Caption",
             parent=base["Normal"],
-            fontName="ReportCN",
-            fontSize=8,
-            leading=12,
+            fontName="SourceSans",
+            fontSize=7.15,
+            leading=9.5,
             textColor=MUTED,
             alignment=TA_CENTER,
-            wordWrap="CJK",
-            spaceBefore=1.5 * mm,
-            spaceAfter=3 * mm,
+            spaceAfter=2.4 * mm,
         ),
-        "Table": ParagraphStyle(
-            "Table",
+        "Callout": ParagraphStyle(
+            "Callout",
+            parent=base["BodyText"],
+            fontName="SourceSerif",
+            fontSize=9.05,
+            leading=12.9,
+            textColor=INK,
+        ),
+        "FindingLabel": ParagraphStyle(
+            "FindingLabel",
             parent=base["Normal"],
-            fontName="ReportCN",
-            fontSize=7.6,
-            leading=10.5,
+            fontName="SourceSans-Semibold",
+            fontSize=7.2,
+            leading=8.7,
+            textColor=ACCENT,
+            alignment=TA_CENTER,
+        ),
+        "FindingValue": ParagraphStyle(
+            "FindingValue",
+            parent=base["Normal"],
+            fontName="SourceSerif-Semibold",
+            fontSize=13.5,
+            leading=15.5,
             textColor=INK,
             alignment=TA_CENTER,
-            wordWrap="CJK",
         ),
-        "TableLeft": ParagraphStyle(
-            "TableLeft",
+        "FindingText": ParagraphStyle(
+            "FindingText",
             parent=base["Normal"],
-            fontName="ReportCN",
-            fontSize=7.6,
-            leading=10.5,
+            fontName="SourceSans",
+            fontSize=7.2,
+            leading=9.3,
+            textColor=MUTED,
+            alignment=TA_CENTER,
+        ),
+        "Bullet": ParagraphStyle(
+            "Bullet",
+            parent=base["BodyText"],
+            fontName="SourceSerif",
+            fontSize=8.5,
+            leading=11.8,
             textColor=INK,
-            alignment=TA_LEFT,
-            wordWrap="CJK",
+            leftIndent=3.5 * mm,
+            firstLineIndent=-2.5 * mm,
+            spaceAfter=1.1 * mm,
         ),
         "Reference": ParagraphStyle(
             "Reference",
             parent=base["BodyText"],
-            fontName="ReportCN",
-            fontSize=7.5,
-            leading=10.5,
-            textColor=INK,
-            leftIndent=5 * mm,
-            firstLineIndent=-5 * mm,
-            wordWrap="CJK",
-            spaceAfter=0.8 * mm,
-        ),
-        "ReferenceBlock": ParagraphStyle(
-            "ReferenceBlock",
-            parent=base["BodyText"],
-            fontName="ReportCN",
-            fontSize=6.9,
+            fontName="SourceSerif",
+            fontSize=7.15,
             leading=9.6,
             textColor=INK,
-            wordWrap="CJK",
-            spaceAfter=0,
+            leftIndent=4 * mm,
+            firstLineIndent=-4 * mm,
+            spaceAfter=0.9 * mm,
+        ),
+        "Code": ParagraphStyle(
+            "Code",
+            parent=base["Code"],
+            fontName="Courier",
+            fontSize=6.9,
+            leading=9.5,
+            textColor=INK,
         ),
     }
 
 
-class ReportTemplate(BaseDocTemplate):
+class ReportDocument(BaseDocTemplate):
     def __init__(self, filename: str):
         super().__init__(
             filename,
             pagesize=A4,
-            leftMargin=21 * mm,
-            rightMargin=21 * mm,
+            leftMargin=23 * mm,
+            rightMargin=23 * mm,
             topMargin=19 * mm,
-            bottomMargin=17 * mm,
-            title="位置分布变化下的 FashionMNIST 分类：模型结构、Patch 尺度与嵌入方式的对比实验",
+            bottomMargin=18 * mm,
+            title="Position Generalization in Translated FashionMNIST",
             author="",
-            subject="Translated FashionMNIST comparison study",
+            subject="Architecture, patch scale, and patch embedding comparisons",
         )
         frame = Frame(
             self.leftMargin,
             self.bottomMargin,
             self.width,
             self.height,
-            id="content",
+            id="main",
+            leftPadding=0,
+            rightPadding=0,
+            topPadding=0,
+            bottomPadding=0,
         )
-        self.addPageTemplates([PageTemplate(id="main", frames=frame, onPage=self.draw_page)])
-        self._heading_sequence = 0
+        self.addPageTemplates([PageTemplate(id="academic", frames=frame, onPage=self.decorate)])
 
-    def draw_page(self, canvas, document) -> None:
+    def decorate(self, canvas, document) -> None:
         canvas.saveState()
         canvas.setStrokeColor(RULE)
         canvas.setLineWidth(0.45)
-        canvas.line(21 * mm, A4[1] - 13 * mm, A4[0] - 21 * mm, A4[1] - 13 * mm)
-        canvas.setFont("ReportCN", 7.6)
+        canvas.line(23 * mm, 13 * mm, A4[0] - 23 * mm, 13 * mm)
+        canvas.setFont("SourceSans", 7)
         canvas.setFillColor(MUTED)
-        if document.page > 1:
-            canvas.drawString(
-                21 * mm,
-                A4[1] - 10.2 * mm,
-                "位置分布变化下的 FashionMNIST 分类对比实验",
-            )
-        canvas.drawRightString(A4[0] - 21 * mm, 9.5 * mm, str(document.page))
+        canvas.drawString(23 * mm, 8.5 * mm, "TRANSLATED FASHIONMNIST COMPARISON STUDY")
+        canvas.drawRightString(A4[0] - 23 * mm, 8.5 * mm, f"{document.page}")
         canvas.restoreState()
 
-    def afterFlowable(self, flowable) -> None:
-        if not isinstance(flowable, Paragraph):
-            return
-        if flowable.style.name not in {"Heading1", "Heading2"}:
-            return
-        level = 0 if flowable.style.name == "Heading1" else 1
-        self._heading_sequence += 1
-        key = f"heading-{self._heading_sequence}"
-        self.canv.bookmarkPage(key)
-        self.canv.addOutlineEntry(flowable.getPlainText(), key, level=level, closed=False)
 
-
-def p(text: str, styles, style: str = "Body") -> Paragraph:
-    return Paragraph(text, styles[style])
-
-
-def bullet(text: str, styles) -> Paragraph:
-    return Paragraph(f"• {text}", styles["Bullet"])
-
-
-def make_table(
-    rows: list[list[str]],
-    widths: list[float],
-    styles,
-    *,
-    left_columns: set[int] | None = None,
-) -> Table:
-    left_columns = left_columns or set()
-    rendered: list[list[Paragraph]] = []
-    for row_index, row in enumerate(rows):
-        output_row = []
-        for column_index, value in enumerate(row):
-            value = escape(str(value))
-            if row_index == 0:
-                value = f"<b>{value}</b>"
-            style = styles["TableLeft"] if column_index in left_columns else styles["Table"]
-            output_row.append(Paragraph(value, style))
-        rendered.append(output_row)
-    result = Table(rendered, colWidths=widths, repeatRows=1, hAlign="CENTER")
-    result.setStyle(
-        TableStyle(
+def section_header(number: str, title: str, style_map) -> Table:
+    return Table(
+        [[Paragraph(number, style_map["TableHeader"]), Paragraph(title, style_map["MiniTitle"])]],
+        colWidths=[8 * mm, 156 * mm],
+        style=TableStyle(
             [
-                ("BACKGROUND", (0, 0), (-1, 0), ACCENT),
-                ("TEXTCOLOR", (0, 0), (-1, 0), WHITE),
-                ("ROWBACKGROUNDS", (0, 1), (-1, -1), [WHITE, PALE]),
-                ("GRID", (0, 0), (-1, -1), 0.4, RULE),
-                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-                ("TOPPADDING", (0, 0), (-1, -1), 4.2),
-                ("BOTTOMPADDING", (0, 0), (-1, -1), 4.2),
-                ("LEFTPADDING", (0, 0), (-1, -1), 3.5),
-                ("RIGHTPADDING", (0, 0), (-1, -1), 3.5),
+                ("VALIGN", (0, 0), (-1, -1), "BOTTOM"),
+                ("LEFTPADDING", (0, 0), (-1, -1), 0),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 0),
+                ("TOPPADDING", (0, 0), (-1, -1), 0),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 2.5),
+                ("LINEBELOW", (0, 0), (-1, -1), 0.55, RULE),
             ]
-        )
-    )
-    return result
-
-
-def figure(path: Path, caption: str, styles, *, max_height: float) -> KeepTogether:
-    image = Image(str(path))
-    max_width = 165 * mm
-    scale = min(max_width / image.imageWidth, max_height / image.imageHeight)
-    image.drawWidth = image.imageWidth * scale
-    image.drawHeight = image.imageHeight * scale
-    return KeepTogether([image, Paragraph(caption, styles["Caption"])])
-
-
-def read_metrics() -> list[dict]:
-    with (RESULTS_DIR / "metrics.csv").open(newline="", encoding="utf-8") as file:
-        rows = list(csv.DictReader(file))
-    for row in rows:
-        row["setting"] = int(row["setting"])
-        row["test_accuracy"] = float(row["test_accuracy"])
-        row["train_elapsed_seconds"] = float(row["train_elapsed_seconds"])
-        row["parameter_count"] = int(row["parameter_count"])
-    return rows
-
-
-def accuracy(rows: list[dict], config_id: str, setting: int) -> float:
-    record = next(
-        row
-        for row in rows
-        if row["config_id"] == config_id and row["setting"] == setting
-    )
-    return 100 * record["test_accuracy"]
-
-
-def total_minutes(rows: list[dict], config_id: str) -> float:
-    by_train_mode = {
-        row["train_mode"]: row["train_elapsed_seconds"]
-        for row in rows
-        if row["config_id"] == config_id
-    }
-    return sum(by_train_mode.values()) / 60
-
-
-def add_opening(story, styles) -> None:
-    story.extend(
-        [
-            Spacer(1, 5 * mm),
-            Paragraph(
-                "位置分布变化下的 FashionMNIST 分类：<br/>"
-                "模型结构、Patch 尺度与嵌入方式的对比实验",
-                styles["Title"],
-            ),
-            Paragraph("短学期深度学习课程扩展实验", styles["Subtitle"]),
-            Paragraph("摘要", styles["Heading1"]),
-            p(
-                "本实验研究位置分布变化对 FashionMNIST 分类模型的影响。原始 28×28 图像被放入 "
-                "64×64 画布。由此构成随机位置分布 A 与固定居中分布 B。在相同的数据划分、训练轮数和"
-                "模型选择规则下，分别比较 MLP、CNN 与 Vision Transformer（ViT），比较 ViT 的 "
-                "patch size 4、8、16，并比较 Conv2d 与 Flatten+Linear 两种 patch embedding。"
-                "结果显示，CNN 在四项设置中均领先，B→A 为 35.40%。patch "
-                "size 8 在准确率与训练成本之间较为均衡；两种 patch embedding 的四项准确率差异"
-                "均不超过 0.61 个百分点。所有模型从 B→B 切换到 B→A 时均明显下降，表明固定位置"
-                "训练不足以覆盖随机平移分布。由于正式实验只使用一个随机种子，本文将结果解释为"
-                "受控条件下的观察，不作统计显著性判断。",
-                styles,
-                "Abstract",
-            ),
-            p(
-                "<b>关键词：</b>FashionMNIST；位置泛化；卷积神经网络；Vision Transformer；"
-                "Patch Embedding",
-                styles,
-                "Abstract",
-            ),
-            Paragraph("1 研究问题", styles["Heading1"]),
-            p(
-                "图像类别不随平移改变，但分类器未必具备稳定的平移泛化能力。课程基础任务采用 ViT "
-                "处理位置可变 FashionMNIST；本实验只讨论三项扩展比较，不重复基础模型的实现过程。"
-                "研究问题是：不同结构的空间归纳偏置是否影响位置泛化；更细的 patch 是否改善小图像"
-                "分类；两种常用 patch embedding 实现是否产生可测的性能差异。",
-                styles,
-            ),
-            bullet("结构比较：MLP、CNN、patch-16 ViT。", styles),
-            bullet("Patch 尺度比较：在相同 ViT 主体下采用 patch size 4、8、16。", styles),
-            bullet("嵌入比较：在 patch size 16 下采用 Conv2d 或 Flatten+Linear。", styles),
-            p(
-                "评价同时报告同分布结果 A→A、B→B 和跨分布结果 A→B、B→A。箭头左侧为训练"
-                "分布，右侧为测试分布。B→A 是最具区分度的设置：模型只见过居中样本，却需要识别"
-                "随机位置样本。",
-                styles,
-            ),
-        ]
+        ),
+        spaceBefore=3.7 * mm,
+        spaceAfter=2.1 * mm,
     )
 
 
-def add_method(story, styles, manifest: dict) -> None:
-    protocol = manifest["protocol"]
-    story.extend(
-        [
-            Paragraph("2 数据与实验方法", styles["Heading1"]),
-            Paragraph("2.1 数据构造与评价设置", styles["Heading2"]),
-            p(
-                "FashionMNIST 官方训练集含 60,000 张图像，按固定随机顺序划分为 54,000 个训练"
-                "样本和 6,000 个验证样本；官方测试集含 10,000 个样本。每张 28×28 灰度图像均"
-                "嵌入 64×64 黑色画布。分布 A 对每个样本独立采样合法平移，分布 B 将图像固定在"
-                "画布中心。类别标签与原始数据保持一致。",
-                styles,
-            ),
-            make_table(
-                [
-                    ["设置", "训练分布", "测试分布", "评价含义"],
-                    ["A→A", "随机位置", "随机位置", "随机位置同分布性能"],
-                    ["B→B", "固定居中", "固定居中", "固定位置同分布性能"],
-                    ["A→B", "随机位置", "固定居中", "随机训练对中心位置的覆盖"],
-                    ["B→A", "固定居中", "随机位置", "固定训练对平移分布的泛化"],
-                ],
-                [22 * mm, 32 * mm, 32 * mm, 79 * mm],
-                styles,
-                left_columns={3},
-            ),
-            Paragraph("表 1　四种训练—测试设置", styles["Caption"]),
-            Paragraph("2.2 训练协议", styles["Heading2"]),
-            p(
-                f"所有配置采用 AdamW，学习率 {protocol['learning_rate']}，权重衰减 "
-                f"{protocol['weight_decay']}，batch size {protocol['batch_size']}，训练 "
-                f"{protocol['epochs']} 个 epoch，随机种子 {protocol['seed']}。每个配置分别训练"
-                "一个 A 模型和一个 B 模型；最佳 checkpoint 由对应分布的验证准确率选择，测试集"
-                "仅用于最终评价。这样既避免四个设置各自重复训练，也避免以测试集选择 epoch。",
-                styles,
-            ),
-            p(
-                "训练启用自动混合精度，但未开启完全确定性 CUDA 算法。正式记录来自 Python "
-                f"{manifest['environment']['python']}、PyTorch {manifest['environment']['torch']}、"
-                f"{manifest['environment']['gpu']}。运行时间用于比较本机同一批实验的相对成本，"
-                "不作为跨硬件基准。",
-                styles,
-            ),
-            Paragraph("2.3 控制变量与模型", styles["Heading2"]),
-            p(
-                "模型结构比较使用 MLP、两层卷积 CNN 和 patch-16 ViT。Patch 尺度实验只改变 "
-                "patch size，保持 embedding dimension、Transformer 深度和注意力头数不变。"
-                "Patch embedding 实验固定 patch size 16，并保持参数量一致。不同结构的参数量"
-                "未强制匹配，因此模型结构比较反映的是完整配置差异，而非纯粹的参数效率比较。",
-                styles,
-            ),
-            p(
-                "实验程序保存训练历史、最佳验证准确率、最终测试指标、配置清单和绘图数据。"
-                "图表全部由保存的 CSV/JSON 记录生成，报告数值不依赖人工抄录。",
-                styles,
-            ),
-        ]
-    )
-
-
-def add_overall_results(story, styles, rows: list[dict]) -> None:
-    labels = [
-        ("mlp", "MLP"),
-        ("cnn", "CNN"),
-        ("vit_p16_conv", "ViT, patch 16"),
-        ("vit_p8_conv", "ViT, patch 8"),
-        ("vit_p4_conv", "ViT, patch 4"),
-        ("vit_p16_linear", "ViT, Linear patch 16"),
+def ruled_table(rows, widths, *, header=True, compact=False) -> Table:
+    line_height = 4 if compact else 4.7
+    commands = [
+        ("BACKGROUND", (0, 0), (-1, 0), PALE),
+        ("LINEABOVE", (0, 0), (-1, 0), 0.65, NAVY),
+        ("LINEBELOW", (0, 0), (-1, 0), 0.45, RULE),
+        ("LINEBELOW", (0, 1), (-1, -2), 0.35, RULE),
+        ("LINEBELOW", (0, -1), (-1, -1), 0.65, NAVY),
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("LEFTPADDING", (0, 0), (-1, -1), 5),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 5),
+        ("TOPPADDING", (0, 0), (-1, -1), line_height),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), line_height),
     ]
-    result_rows = [["配置", "参数量", "A→A", "B→B", "A→B", "B→A"]]
-    for config_id, label in labels:
-        parameters = next(
-            row["parameter_count"] for row in rows if row["config_id"] == config_id
-        )
-        result_rows.append(
+    if not header:
+        commands.pop(0)
+    return Table(rows, colWidths=widths, style=TableStyle(commands))
+
+
+def side_note(text: str, style_map) -> Table:
+    return Table(
+        [["", Paragraph(text, style_map["Callout"])]],
+        colWidths=[2.2 * mm, 161.8 * mm],
+        style=TableStyle(
             [
+                ("BACKGROUND", (0, 0), (0, 0), ACCENT),
+                ("LEFTPADDING", (0, 0), (0, 0), 0),
+                ("RIGHTPADDING", (0, 0), (0, 0), 0),
+                ("TOPPADDING", (0, 0), (0, 0), 0),
+                ("BOTTOMPADDING", (0, 0), (0, 0), 0),
+                ("LEFTPADDING", (1, 0), (1, 0), 9),
+                ("RIGHTPADDING", (1, 0), (1, 0), 0),
+                ("TOPPADDING", (1, 0), (1, 0), 0),
+                ("BOTTOMPADDING", (1, 0), (1, 0), 0),
+                ("VALIGN", (0, 0), (-1, -1), "TOP"),
+            ]
+        ),
+    )
+
+
+def chart_block(drawing: Drawing, caption: str, style_map) -> KeepTogether:
+    return KeepTogether([drawing, Paragraph(caption, style_map["Caption"])])
+
+
+def add_axes(
+    drawing: Drawing, *, maximum: float, steps: int, title: str, height: float = 105
+) -> tuple[float, float, float, float]:
+    left, bottom, width = 39, 29, 386
+    drawing.add(
+        String(
+            left,
+            height + 49,
+            title,
+            fontName="SourceSans-Semibold",
+            fontSize=8.7,
+            fillColor=NAVY,
+        )
+    )
+    for index in range(steps + 1):
+        value = maximum * index / steps
+        y = bottom + height * index / steps
+        drawing.add(Line(left, y, left + width, y, strokeColor=RULE, strokeWidth=0.4))
+        drawing.add(
+            String(
+                left - 7,
+                y - 2.2,
+                f"{value:.0f}",
+                fontName="SourceSans",
+                fontSize=6.3,
+                fillColor=MUTED,
+                textAnchor="end",
+            )
+        )
+    drawing.add(Line(left, bottom, left + width, bottom, strokeColor=MUTED, strokeWidth=0.7))
+    return left, bottom, width, height
+
+
+def make_hard_transfer_chart(data: dict[str, dict]) -> Drawing:
+    drawing = Drawing(465, 165)
+    left, bottom, width, height = add_axes(
+        drawing,
+        maximum=45,
+        steps=3,
+        title="Accuracy on fixed-center train -> random-position test",
+    )
+    config_ids = ("mlp", "cnn", "vit_p16_conv")
+    labels = ("MLP", "CNN", "ViT / 16")
+    fills = (GRAY, ACCENT, BLUE)
+    centers = (left + width * 0.20, left + width * 0.50, left + width * 0.80)
+    bar_width = 48
+    for center, config_id, label, fill in zip(centers, config_ids, labels, fills):
+        value = data[config_id]["accuracy"][("B", "A")]
+        bar_height = height * value / 45
+        drawing.add(
+            Rect(
+                center - bar_width / 2,
+                bottom,
+                bar_width,
+                bar_height,
+                fillColor=fill,
+                strokeColor=None,
+            )
+        )
+        drawing.add(
+            String(
+                center,
+                bottom + bar_height + 5,
+                f"{value:.1f}%",
+                fontName="SourceSans-Semibold",
+                fontSize=7.3,
+                fillColor=INK,
+                textAnchor="middle",
+            )
+        )
+        drawing.add(
+            String(
+                center,
+                bottom - 12,
                 label,
-                f"{parameters:,}",
-                *[f"{accuracy(rows, config_id, setting):.2f}%" for setting in (1, 2, 3, 4)],
+                fontName="SourceSans",
+                fontSize=7,
+                fillColor=INK,
+                textAnchor="middle",
+            )
+        )
+    return drawing
+
+
+def make_shift_chart(data: dict[str, dict]) -> Drawing:
+    drawing = Drawing(465, 165)
+    left, bottom, width, height = add_axes(
+        drawing,
+        maximum=100,
+        steps=4,
+        title="Fixed-position accuracy before and after the test distribution shifts",
+    )
+    config_ids = ("mlp", "cnn", "vit_p16_conv")
+    labels = ("MLP", "CNN", "ViT / 16")
+    centers = (left + width * 0.20, left + width * 0.50, left + width * 0.80)
+    bar_width = 25
+    for center, config_id, label in zip(centers, config_ids, labels):
+        values = (
+            data[config_id]["accuracy"][("B", "B")],
+            data[config_id]["accuracy"][("B", "A")],
+        )
+        for offset, value, fill in (
+            (-bar_width / 2, values[0], BLUE),
+            (bar_width / 2, values[1], ORANGE),
+        ):
+            bar_height = height * value / 100
+            drawing.add(
+                Rect(
+                    center + offset - bar_width / 2,
+                    bottom,
+                    bar_width,
+                    bar_height,
+                    fillColor=fill,
+                    strokeColor=None,
+                )
+            )
+        drop = values[0] - values[1]
+        drawing.add(
+            String(
+                center,
+                bottom + height * values[0] / 100 + 5,
+                f"-{drop:.1f} pp",
+                fontName="SourceSans-Semibold",
+                fontSize=6.7,
+                fillColor=INK,
+                textAnchor="middle",
+            )
+        )
+        drawing.add(
+            String(
+                center,
+                bottom - 12,
+                label,
+                fontName="SourceSans",
+                fontSize=7,
+                fillColor=INK,
+                textAnchor="middle",
+            )
+        )
+    drawing.add(Rect(329, 151, 8, 5, fillColor=BLUE, strokeColor=None))
+    drawing.add(String(341, 150, "B -> B", fontName="SourceSans", fontSize=6.5, fillColor=MUTED))
+    drawing.add(Rect(382, 151, 8, 5, fillColor=ORANGE, strokeColor=None))
+    drawing.add(String(394, 150, "B -> A", fontName="SourceSans", fontSize=6.5, fillColor=MUTED))
+    return drawing
+
+
+def make_patch_chart(data: dict[str, dict]) -> Drawing:
+    drawing = Drawing(465, 165)
+    left, bottom, width, height = add_axes(
+        drawing,
+        maximum=100,
+        steps=4,
+        title="Patch-size ablation under the shared ViT training budget",
+    )
+    config_ids = ("vit_p4_conv", "vit_p8_conv", "vit_p16_conv")
+    labels = ("4", "8", "16")
+    centers = (left + width * 0.20, left + width * 0.50, left + width * 0.80)
+    bar_width = 25
+    for center, config_id, label in zip(centers, config_ids, labels):
+        values = (
+            data[config_id]["accuracy"][("A", "A")],
+            data[config_id]["accuracy"][("B", "A")],
+        )
+        for offset, value, fill in (
+            (-bar_width / 2, values[0], BLUE),
+            (bar_width / 2, values[1], ORANGE),
+        ):
+            bar_height = height * value / 100
+            drawing.add(
+                Rect(
+                    center + offset - bar_width / 2,
+                    bottom,
+                    bar_width,
+                    bar_height,
+                    fillColor=fill,
+                    strokeColor=None,
+                )
+            )
+            drawing.add(
+                String(
+                    center + offset,
+                    bottom + bar_height + 4,
+                    f"{value:.1f}",
+                    fontName="SourceSans",
+                    fontSize=6.7,
+                    fillColor=INK,
+                    textAnchor="middle",
+                )
+            )
+        drawing.add(
+            String(
+                center,
+                bottom - 12,
+                label,
+                fontName="SourceSans",
+                fontSize=7,
+                fillColor=INK,
+                textAnchor="middle",
+            )
+        )
+    drawing.add(Rect(329, 151, 8, 5, fillColor=BLUE, strokeColor=None))
+    drawing.add(String(341, 150, "A -> A", fontName="SourceSans", fontSize=6.5, fillColor=MUTED))
+    drawing.add(Rect(382, 151, 8, 5, fillColor=ORANGE, strokeColor=None))
+    drawing.add(String(394, 150, "B -> A", fontName="SourceSans", fontSize=6.5, fillColor=MUTED))
+    return drawing
+
+
+def page_heading(kicker: str, title: str, subtitle: str, style_map) -> list:
+    return [
+        Paragraph(kicker, style_map["Kicker"]),
+        Paragraph(title, style_map["PageTitle"]),
+        Paragraph(subtitle, style_map["Subtitle"]),
+    ]
+
+
+def accuracy_table(data: dict[str, dict], config_ids, labels, style_map) -> Table:
+    rows = [
+        [
+            Paragraph("Configuration", style_map["TableHeader"]),
+            Paragraph("Parameters", style_map["TableHeader"]),
+            *[Paragraph(label, style_map["TableHeader"]) for label in SETTINGS],
+        ]
+    ]
+    for config_id, label in zip(config_ids, labels):
+        config = data[config_id]
+        rows.append(
+            [
+                Paragraph(label, style_map["TableCell"]),
+                Paragraph(f"{config['parameters']:,}", style_map["TableCellCenter"]),
+                *[
+                    Paragraph(
+                        f"{config['accuracy'][key]:.2f}",
+                        style_map["TableCellCenter"],
+                    )
+                    for key in SETTING_KEYS
+                ],
             ]
         )
-    story.extend(
-        [
-            Paragraph("3 总体结果", styles["Heading1"]),
-            p(
-                "表 2 汇总六个配置的最终测试准确率。B→B 普遍高于 A→A，说明固定居中数据的"
-                "变化范围更小；A→B 与 A→A 接近，说明随机位置训练通常能够覆盖中心位置。相反，"
-                "B→A 对所有配置都困难，且准确率远低于对应的 B→B。",
-                styles,
-            ),
-            make_table(
-                result_rows,
-                [44 * mm, 27 * mm, 23.5 * mm, 23.5 * mm, 23.5 * mm, 23.5 * mm],
-                styles,
-                left_columns={0},
-            ),
-            Paragraph("表 2　六个配置在四种位置设置下的测试准确率", styles["Caption"]),
-            figure(
-                FIGURES_DIR / "training_dynamics.png",
-                "图 1　六种配置在 A、B 验证集上的训练过程。每条曲线对应一个独立训练模型。",
-                styles,
-                max_height=91 * mm,
-            ),
-            p(
-                "验证曲线在 15 个 epoch 内整体趋于平稳，没有持续发散。B 分布的曲线通常更快达到"
-                "较高准确率，这与其只包含中心位置、样本变化较少一致。A 分布同时包含类别差异和"
-                "位置变化，训练准确率较低并不直接表示模型失效，而是反映任务范围扩大。后续比较"
-                "因此以同一设置内的模型差异为主，不将 A 与 B 的绝对准确率简单等同。",
-                styles,
-            ),
-        ]
+    return ruled_table(
+        rows,
+        [43 * mm, 25 * mm, 24 * mm, 24 * mm, 24 * mm, 24 * mm],
     )
 
 
-def add_model_comparison(story, styles, rows: list[dict]) -> None:
-    mlp_drop = accuracy(rows, "mlp", 2) - accuracy(rows, "mlp", 4)
-    cnn_drop = accuracy(rows, "cnn", 2) - accuracy(rows, "cnn", 4)
-    vit_drop = accuracy(rows, "vit_p16_conv", 2) - accuracy(rows, "vit_p16_conv", 4)
-    story.extend(
+def build_story(data: dict[str, dict], style_map) -> list:
+    protocol_table = ruled_table(
         [
-            Paragraph("4 对比一：MLP、CNN 与 ViT", styles["Heading1"]),
-            figure(
-                FIGURES_DIR / "model_comparison.png",
-                "图 2　MLP、CNN 与 patch-16 ViT 在四种位置设置下的测试准确率。",
-                styles,
-                max_height=78 * mm,
-            ),
-            p(
-                "CNN 在四项设置中均为最高：A→A 92.35%，B→B 93.14%，A→B 92.87%，"
-                "B→A 35.40%。MLP 的 A→A 与 A→B 均约为 72%；patch-16 ViT 对应结果约为 "
-                "80% 和 81%。在随机位置训练的两个设置中，CNN 比 patch-16 ViT 高 12 个百分点"
-                "左右，差异在本次实验中具有明确的量级。",
-                styles,
-            ),
-            figure(
-                FIGURES_DIR / "position_generalization.png",
-                "图 3　固定位置训练后的性能变化；下降量定义为 B→B 减 B→A。",
-                styles,
-                max_height=68 * mm,
-            ),
-            p(
-                f"从 B→B 切换到 B→A 后，MLP、CNN 和 ViT 分别下降 {mlp_drop:.2f}、"
-                f"{cnn_drop:.2f} 和 {vit_drop:.2f} 个百分点。CNN 的下降仍然很大，但 B→A "
-                "准确率比 MLP 高 21.41 个百分点，比 patch-16 ViT 高 18.49 个百分点。"
-                "局部卷积核在空间位置之间共享参数，为平移后的局部模式提供了直接复用机制；"
-                "MLP 对不同像素位置使用不同连接；当前 ViT 使用可学习绝对位置编码，token 表征"
-                "与训练位置关联更强。这些结构性质与观察到的相对顺序一致，但单次实验不能把"
-                "全部差异唯一归因于某一个组件。",
-                styles,
-            ),
-        ]
+            [
+                Paragraph("Setting", style_map["TableHeader"]),
+                Paragraph("Training", style_map["TableHeader"]),
+                Paragraph("Testing", style_map["TableHeader"]),
+                Paragraph("Purpose", style_map["TableHeader"]),
+            ],
+            [
+                Paragraph("A -> A", style_map["TableCellStrong"]),
+                Paragraph("random", style_map["TableCellCenter"]),
+                Paragraph("random", style_map["TableCellCenter"]),
+                Paragraph("in-distribution reference", style_map["TableCell"]),
+            ],
+            [
+                Paragraph("B -> B", style_map["TableCellStrong"]),
+                Paragraph("center", style_map["TableCellCenter"]),
+                Paragraph("center", style_map["TableCellCenter"]),
+                Paragraph("fixed-position reference", style_map["TableCell"]),
+            ],
+            [
+                Paragraph("A -> B", style_map["TableCellStrong"]),
+                Paragraph("random", style_map["TableCellCenter"]),
+                Paragraph("center", style_map["TableCellCenter"]),
+                Paragraph("random-to-fixed transfer", style_map["TableCell"]),
+            ],
+            [
+                Paragraph("B -> A", style_map["TableCellStrong"]),
+                Paragraph("center", style_map["TableCellCenter"]),
+                Paragraph("random", style_map["TableCellCenter"]),
+                Paragraph("hardest position shift", style_map["TableCell"]),
+            ],
+        ],
+        [25 * mm, 31 * mm, 31 * mm, 77 * mm],
     )
 
-
-def add_patch_size(story, styles, rows: list[dict]) -> None:
-    story.extend(
+    controls_table = ruled_table(
         [
-            Paragraph("5 对比二：ViT Patch 尺度", styles["Heading1"]),
-            figure(
-                FIGURES_DIR / "patch_size_comparison.png",
-                "图 4　保持 ViT 主体结构不变时，patch size 4、8、16 的测试准确率。",
-                styles,
-                max_height=87 * mm,
-            ),
-            p(
-                "patch size 8 在 A→A、A→B 与 B→A 上分别得到 80.40%、81.13% 和 18.81%，"
-                "是三种尺度中的最高值。patch size 16 在 B→B 上最高，为 88.87%。patch size 4 "
-                "在 A→A 与 A→B 上下降到 75.28% 和 74.97%，未获得更细粒度所预期的准确率"
-                "收益。三种设置的参数量接近，因此差异主要伴随 token 数和优化过程变化。",
-                styles,
-            ),
-            Paragraph("序列长度与训练成本", styles["Heading2"]),
-            p(
-                "在 64×64 画布上，patch size 4、8、16 分别产生 256、64、16 个图像 token。"
-                "自注意力需要建立 token 两两关系，其矩阵元素数分别为 65,536、4,096 和 256。"
-                "这一理论规模不等同于端到端时间，因为数据加载、线性层和 GPU 并行效率也占用"
-                "时间，但可解释细粒度 patch 的额外计算压力。",
-                styles,
-            ),
-            p(
-                f"本机训练 A、B 两个模型的累计时间分别为：patch 4 为 "
-                f"{total_minutes(rows, 'vit_p4_conv'):.2f} 分钟，patch 8 为 "
-                f"{total_minutes(rows, 'vit_p8_conv'):.2f} 分钟，patch 16 为 "
-                f"{total_minutes(rows, 'vit_p16_conv'):.2f} 分钟。patch size 4 最慢，"
-                "但准确率没有提高。当前任务中，patch size 8 避免了 patch 16 的较粗空间划分，"
-                "又不承担 patch 4 的长序列成本，因而是更合理的折中。该判断只适用于当前画布、"
-                "模型深度和训练预算。",
-                styles,
-            ),
-            p(
-                "更小 patch 并不必然带来更好结果。细粒度输入增加了可用空间信息，也增加了序列"
-                "长度和优化难度；当训练轮数固定时，后者可能抵消前者。若要判断 patch 4 是否"
-                "受训练不足影响，需要进一步增加训练预算或调整学习率，而不能只依据单一设置外推。",
-                styles,
-            ),
-        ]
+            [
+                Paragraph("Item", style_map["TableHeader"]),
+                Paragraph("Controlled choice", style_map["TableHeader"]),
+            ],
+            [
+                Paragraph("Data", style_map["TableCell"]),
+                Paragraph("FashionMNIST on a 64 x 64 black canvas", style_map["TableCell"]),
+            ],
+            [
+                Paragraph("Split", style_map["TableCell"]),
+                Paragraph("90% train, 10% validation; official test set held out", style_map["TableCell"]),
+            ],
+            [
+                Paragraph("Training", style_map["TableCell"]),
+                Paragraph("15 epochs, AdamW, seed 42", style_map["TableCell"]),
+            ],
+            [
+                Paragraph("Selection", style_map["TableCell"]),
+                Paragraph("best validation checkpoint", style_map["TableCell"]),
+            ],
+            [
+                Paragraph("Reporting", style_map["TableCell"]),
+                Paragraph("test accuracy and elapsed training time", style_map["TableCell"]),
+            ],
+        ],
+        [34 * mm, 130 * mm],
+        compact=True,
     )
 
+    architecture_table = accuracy_table(
+        data,
+        ("mlp", "cnn", "vit_p16_conv"),
+        ("MLP", "CNN", "ViT, patch 16"),
+        style_map,
+    )
 
-def add_patch_embedding(story, styles, rows: list[dict]) -> None:
-    differences = [
-        abs(
-            accuracy(rows, "vit_p16_conv", setting)
-            - accuracy(rows, "vit_p16_linear", setting)
-        )
-        for setting in (1, 2, 3, 4)
+    findings = Table(
+        [
+            [
+                Paragraph("BEST B -> A", style_map["FindingLabel"]),
+                Paragraph("CNN ADVANTAGE", style_map["FindingLabel"]),
+                Paragraph("SMALLEST MODEL", style_map["FindingLabel"]),
+            ],
+            [
+                Paragraph("35.40%", style_map["FindingValue"]),
+                Paragraph("+18.49 pp", style_map["FindingValue"]),
+                Paragraph("205,994", style_map["FindingValue"]),
+            ],
+            [
+                Paragraph("CNN", style_map["FindingText"]),
+                Paragraph("over patch-16 ViT", style_map["FindingText"]),
+                Paragraph("CNN parameters", style_map["FindingText"]),
+            ],
+        ],
+        colWidths=[54.67 * mm] * 3,
+        style=TableStyle(
+            [
+                ("BACKGROUND", (0, 0), (-1, -1), PALE_BLUE),
+                ("LINEABOVE", (0, 0), (-1, 0), 0.55, colors.HexColor("#BAD0D5")),
+                ("LINEBELOW", (0, -1), (-1, -1), 0.55, colors.HexColor("#BAD0D5")),
+                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                ("TOPPADDING", (0, 0), (-1, 0), 6),
+                ("TOPPADDING", (0, 1), (-1, 1), 2),
+                ("BOTTOMPADDING", (0, 1), (-1, 1), 1),
+                ("BOTTOMPADDING", (0, 2), (-1, 2), 6),
+            ]
+        ),
+    )
+
+    patch_rows = [
+        [
+            Paragraph("Patch", style_map["TableHeader"]),
+            Paragraph("Tokens", style_map["TableHeader"]),
+            Paragraph("A -> A", style_map["TableHeader"]),
+            Paragraph("B -> B", style_map["TableHeader"]),
+            Paragraph("A -> B", style_map["TableHeader"]),
+            Paragraph("B -> A", style_map["TableHeader"]),
+            Paragraph("Time", style_map["TableHeader"]),
+        ]
     ]
-    story.extend(
-        [
-            Paragraph("6 对比三：Patch Embedding 实现", styles["Heading1"]),
-            figure(
-                FIGURES_DIR / "patch_embedding_comparison.png",
-                "图 5　patch size 16 时，Conv2d 与 Flatten+Linear 的测试准确率。",
-                styles,
-                max_height=90 * mm,
-            ),
-            p(
-                "Conv2d 版本在 A→A、B→B、A→B、B→A 上分别为 80.07%、88.87%、"
-                "80.97%、16.91%；Flatten+Linear 版本分别为 79.67%、88.80%、80.48%、"
-                "16.30%。四项绝对差异为 "
-                + "、".join(f"{value:.2f}" for value in differences)
-                + f" 个百分点，最大差异为 {max(differences):.2f} 个百分点。两者参数量均为 "
-                "829,834，累计训练时间分别为 6.46 和 7.25 分钟。",
-                styles,
-            ),
-            Paragraph("等价关系与结果解释", styles["Heading2"]),
-            p(
-                "当卷积核大小与步长都等于 patch size、patch 之间不重叠时，Conv2d 对每个 patch "
-                "应用同一组卷积核。将卷积核展平后，可得到从 patch_dim 到 embed_dim 的线性"
-                "映射；这与对每个展平 patch 共享同一个 Linear 层在表达形式上等价。项目测试"
-                "通过重排同一组权重，验证了两种前向结果在浮点误差范围内一致。",
-                styles,
-            ),
-            p(
-                "训练结果中的小差异可能来自参数初始化后的随机优化路径、底层算子和浮点计算顺序。"
-                "由于只运行一个随机种子，0.61 个百分点不足以支持稳定优劣判断。就当前非重叠 "
-                "patch 设置而言，选择哪种实现应更多考虑代码接口、可读性和后续扩展需求。若采用"
-                "重叠 patch、卷积前处理或不同归一化，两种方案才会不再对应同一个简单线性映射。",
-                styles,
-            ),
-            p(
-                "因此，本组实验的主要结果不是某种实现提高了准确率，而是实测结果与理论等价关系"
-                "相符：在控制参数量和 patch 划分后，embedding 写法本身没有形成可辨认的性能差距。",
-                styles,
-            ),
-        ]
+    for patch, config_id, tokens in (
+        (4, "vit_p4_conv", 256),
+        (8, "vit_p8_conv", 64),
+        (16, "vit_p16_conv", 16),
+    ):
+        config = data[config_id]
+        elapsed = sum(config["train_seconds"].values()) / 60
+        patch_rows.append(
+            [
+                Paragraph(str(patch), style_map["TableCellStrong"]),
+                Paragraph(str(tokens), style_map["TableCellCenter"]),
+                *[
+                    Paragraph(f"{config['accuracy'][key]:.2f}", style_map["TableCellCenter"])
+                    for key in SETTING_KEYS
+                ],
+                Paragraph(f"{elapsed:.2f} min", style_map["TableCellCenter"]),
+            ]
+        )
+    patch_table = ruled_table(
+        patch_rows,
+        [18 * mm, 21 * mm, 23 * mm, 23 * mm, 23 * mm, 23 * mm, 33 * mm],
     )
 
-
-def add_discussion(story, styles) -> None:
-    story.extend(
+    embedding_rows = [
         [
-            Paragraph("7 讨论", styles["Heading1"]),
-            Paragraph("7.1 三组结果的共同指向", styles["Heading2"]),
-            p(
-                "三组比较共同表明，位置泛化的主要困难不是固定位置样本本身的分类，而是训练分布"
-                "是否覆盖测试时可能出现的位置。B→B 中所有模型都取得较高准确率，但这一结果不能"
-                "预测 B→A。CNN 的局部参数共享改善了跨位置复用，仍无法替代随机位置训练。对 ViT "
-                "而言，增加 token 数也没有自动解决位置泛化。A→B 接近 A→A，则说明随机平移训练"
-                "能够覆盖中心位置。若继续提高 B→A，更直接的方向是平移增强、相对位置编码或显式"
-                "平移不变设计，而不是只增加参数量。",
-                styles,
-            ),
-            Paragraph("7.2 与同学项目的外部参考", styles["Heading2"]),
-            p(
-                "同学仓库 kicious/translated-fashion-mnist-vit 在 commit "
-                "943fa7b68730bc8ea7786bb41c7b8dc1d488883a 公开的四项 reported best 为 "
-                "79.35%、88.22%、80.48%、19.37%。本实验 patch-16 ViT 为 80.07%、88.87%、"
-                "80.97%、16.91%。前三项差异小于 1 个百分点，B→A 差 2.46 个百分点，数值"
-                "量级基本一致。",
-                styles,
-            ),
-            p(
-                "两组记录不构成严格对照。同学项目在每个 epoch 使用测试集评价并保留最佳记录；"
-                "本实验使用验证集选择 checkpoint，测试集只用于最终评价。模型选择规则、训练实现"
-                "和随机过程均不同，因此这里仅检查结果是否处于相近范围，不据此判断项目优劣。",
-                styles,
-            ),
-            Paragraph("7.3 局限性", styles["Heading2"]),
-            bullet("正式结果仅包含 seed 42，未报告均值、标准差和显著性检验。", styles),
-            bullet("MLP、CNN 与 ViT 参数量不同，结构比较同时包含容量差异。", styles),
-            bullet("CUDA 未开启完全确定性；小于 1 个百分点的差异不作强解释。", styles),
-            bullet("训练时间来自单一笔记本 GPU，只能用于本次实验内部比较。", styles),
-            bullet("数据只包含平移变化，结论不直接外推到旋转、缩放或自然图像。", styles),
+            Paragraph("Test", style_map["TableHeader"]),
+            Paragraph("Conv2d", style_map["TableHeader"]),
+            Paragraph("Flatten + Linear", style_map["TableHeader"]),
+            Paragraph("Absolute gap", style_map["TableHeader"]),
         ]
+    ]
+    for label, key in zip(SETTINGS, SETTING_KEYS):
+        conv = data["vit_p16_conv"]["accuracy"][key]
+        linear = data["vit_p16_linear"]["accuracy"][key]
+        embedding_rows.append(
+            [
+                Paragraph(label, style_map["TableCell"]),
+                Paragraph(f"{conv:.2f}", style_map["TableCellCenter"]),
+                Paragraph(f"{linear:.2f}", style_map["TableCellCenter"]),
+                Paragraph(f"{abs(conv - linear):.2f}", style_map["TableCellCenter"]),
+            ]
+        )
+    embedding_table = ruled_table(embedding_rows, [41 * mm] * 4)
+
+    conclusions = Table(
+        [
+            [
+                Paragraph("01", style_map["FindingValue"]),
+                Paragraph(
+                    "<b>Architecture dominates.</b> CNN leads all four settings and "
+                    "retains the most accuracy under fixed-to-random transfer.",
+                    style_map["BodySmall"],
+                ),
+            ],
+            [
+                Paragraph("02", style_map["FindingValue"]),
+                Paragraph(
+                    "<b>Patch size 8 is the practical ViT choice.</b> It gives the best "
+                    "B -> A result without the 256-token cost of patch size 4.",
+                    style_map["BodySmall"],
+                ),
+            ],
+            [
+                Paragraph("03", style_map["FindingValue"]),
+                Paragraph(
+                    "<b>Embedding syntax is not decisive.</b> Conv2d and "
+                    "Flatten + Linear differ by at most 0.61 percentage points.",
+                    style_map["BodySmall"],
+                ),
+            ],
+        ],
+        colWidths=[20 * mm, 144 * mm],
+        style=TableStyle(
+            [
+                ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                ("LINEBELOW", (0, 0), (-1, -2), 0.4, RULE),
+                ("LEFTPADDING", (0, 0), (-1, -1), 0),
+                ("RIGHTPADDING", (0, 0), (0, -1), 8),
+                ("RIGHTPADDING", (1, 0), (1, -1), 0),
+                ("TOPPADDING", (0, 0), (-1, -1), 7),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 7),
+            ]
+        ),
     )
 
-
-def add_conclusion(story, styles) -> None:
-    story.extend(
+    limitations = Table(
         [
-            Paragraph("8 结论与复现说明", styles["Heading1"]),
-            p(
-                "在统一实验协议下，CNN 是三类结构中表现最好的配置：四项准确率均为最高，且 "
-                "B→A 达到 35.40%。其局部感受野和跨位置参数共享与较强的位置泛化相符，但从 "
-                "B→B 到 B→A 仍下降 57.74 个百分点，说明结构先验不能弥补训练位置覆盖不足。",
-                styles,
-            ),
-            p(
-                "ViT 的 patch size 8 在本实验中取得更好的精度—成本折中。patch size 4 产生 "
-                "256 个 token，训练时间增加到 8.93 分钟，却未获得准确率收益。Conv2d 与 "
-                "Flatten+Linear patch embedding 的最大准确率差异为 0.61 个百分点，且两者在"
-                "非重叠 patch 条件下具有等价的线性表达，本次结果不支持其中一种稳定优于另一种。"
-                "对该任务，训练位置覆盖范围比单纯增加 token 数更关键；后续应优先增加随机种子，"
-                "并评估相对位置编码或平移增强。",
-                styles,
-            ),
-            p(
-                "<b>复现：</b>结构化提交包包含代码、指标和核心图表，不含原始数据与 checkpoint。"
-                "解压并安装依赖后，运行 <font name='Courier'>python VERIFY.py</font> 可检查"
-                "文件结构、正式指标、8 项单元测试和命令行入口。",
-                styles,
-                "BodyNoIndent",
-            ),
-            Paragraph("参考资料", styles["Heading2"]),
-            p(
-                "<b>[1]</b> Xiao H., Rasul K., Vollgraf R. Fashion-MNIST: a Novel Image "
-                "Dataset for Benchmarking Machine Learning Algorithms. arXiv:1708.07747, "
-                "2017.<br/>"
-                "<b>[2]</b> Dosovitskiy A., Beyer L., Kolesnikov A., et al. An Image is "
-                "Worth 16×16 Words: Transformers for Image Recognition at Scale. ICLR, "
-                "2021.<br/>"
-                "<b>[3]</b> 课程材料：《位置可变的 FashionMNIST 数据生成》《人工神经网络》"
-                "《实验实现》《关于作业与实验报告》，2026。<br/>"
-                "<b>[4]</b> kicious/translated-fashion-mnist-vit, commit "
-                "943fa7b68730bc8ea7786bb41c7b8dc1d488883a.",
-                styles,
-                "ReferenceBlock",
-            ),
-        ]
+            [
+                [
+                    Paragraph("Scope", style_map["MiniTitle"]),
+                    Paragraph(
+                        "- One formal seed; no variance estimate.<br/>"
+                        "- Model sizes are not exactly matched.<br/>"
+                        "- Runtime is hardware-specific.",
+                        style_map["BodySmall"],
+                    ),
+                ],
+                [
+                    Paragraph("Interpretation rule", style_map["MiniTitle"]),
+                    Paragraph(
+                        "Differences below 1 percentage point are treated as practically "
+                        "similar. Results support a controlled course comparison, not a "
+                        "population-level claim.",
+                        style_map["BodySmall"],
+                    ),
+                ],
+            ]
+        ],
+        colWidths=[80 * mm, 80 * mm],
+        style=TableStyle(
+            [
+                ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                ("LINEABOVE", (0, 0), (-1, 0), 0.55, RULE),
+                ("LEFTPADDING", (0, 0), (0, 0), 0),
+                ("RIGHTPADDING", (0, 0), (0, 0), 7),
+                ("LEFTPADDING", (1, 0), (1, 0), 7),
+                ("RIGHTPADDING", (1, 0), (1, 0), 0),
+                ("TOPPADDING", (0, 0), (-1, -1), 7),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
+            ]
+        ),
     )
 
+    reproducibility = ruled_table(
+        [
+            [
+                Paragraph("Check", style_map["TableHeader"]),
+                Paragraph("Recorded value", style_map["TableHeader"]),
+            ],
+            [
+                Paragraph("Code", style_map["TableCell"]),
+                Paragraph("experiments/comparisons", style_map["TableCell"]),
+            ],
+            [
+                Paragraph("Metrics", style_map["TableCell"]),
+                Paragraph("results/comparisons/metrics.csv", style_map["TableCell"]),
+            ],
+            [
+                Paragraph("Seed / epochs", style_map["TableCell"]),
+                Paragraph("42 / 15", style_map["TableCell"]),
+            ],
+            [
+                Paragraph("Environment", style_map["TableCell"]),
+                Paragraph("Python 3.12, PyTorch 2.11, CUDA 12.8", style_map["TableCell"]),
+            ],
+            [
+                Paragraph("Hardware", style_map["TableCell"]),
+                Paragraph("NVIDIA GeForce RTX 5070 Laptop GPU", style_map["TableCell"]),
+            ],
+        ],
+        [40 * mm, 124 * mm],
+        compact=True,
+    )
 
-def build_report(output_path: Path = OUTPUT_PATH) -> Path:
+    abstract = side_note(
+        "<i>Abstract.</i> We test whether image classifiers retain accuracy when object "
+        "position changes between training and testing. CNN is the strongest baseline "
+        "and reaches 35.40% on the hardest fixed-to-random transfer. Within the ViT "
+        "family, patch size 8 gives the best accuracy-cost balance. Conv2d and "
+        "Flatten + Linear patch embeddings remain within 0.61 percentage points.",
+        style_map,
+    )
+
+    story = [
+        Paragraph("COURSE PROJECT · COMPARISON STUDY", style_map["Kicker"]),
+        Paragraph("Position Generalization in<br/>Translated FashionMNIST", style_map["Title"]),
+        Paragraph(
+            "Architecture, patch scale, and patch embedding",
+            style_map["Subtitle"],
+        ),
+        Table(
+            [
+                [
+                    Paragraph("Final English report", style_map["Meta"]),
+                    Paragraph("Controlled experiments · seed 42", style_map["Meta"]),
+                ]
+            ],
+            colWidths=[82 * mm, 82 * mm],
+            style=TableStyle(
+                [
+                    ("LINEABOVE", (0, 0), (-1, 0), 0.7, NAVY),
+                    ("LINEBELOW", (0, 0), (-1, 0), 0.35, RULE),
+                    ("ALIGN", (1, 0), (1, 0), "RIGHT"),
+                    ("LEFTPADDING", (0, 0), (-1, -1), 0),
+                    ("RIGHTPADDING", (0, 0), (-1, -1), 0),
+                    ("TOPPADDING", (0, 0), (-1, -1), 5),
+                    ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
+                ]
+            ),
+        ),
+        Spacer(1, 4 * mm),
+        abstract,
+        section_header("1", "Question", style_map),
+        Paragraph(
+            "A classifier may learn class appearance and object location together. "
+            "This study isolates the effect of location by comparing random-position "
+            "images (A) with centered images (B).",
+            style_map["Body"],
+        ),
+        protocol_table,
+        section_header("2", "Controlled protocol", style_map),
+        Paragraph(
+            "Each configuration trains one model on A and one on B. Validation chooses "
+            "the checkpoint; the official test set is used once for final evaluation.",
+            style_map["Body"],
+        ),
+        controls_table,
+        Spacer(1, 3 * mm),
+        side_note(
+            "<b>Primary measure.</b> B -> A is the hardest setting because a model "
+            "trained only on centered objects must classify objects across the canvas.",
+            style_map,
+        ),
+        PageBreak(),
+        *page_heading(
+            "MODEL COMPARISON",
+            "Architecture and Position Shift",
+            "MLP, CNN, and patch-16 ViT under one evaluation protocol",
+            style_map,
+        ),
+        section_header("3", "Accuracy", style_map),
+        architecture_table,
+        Spacer(1, 2.5 * mm),
+        Paragraph(
+            "Table 1. Test accuracy (%). The best value in every column belongs to CNN.",
+            style_map["Caption"],
+        ),
+        chart_block(
+            make_hard_transfer_chart(data),
+            "Figure 1. CNN retains substantially more accuracy on B -> A.",
+            style_map,
+        ),
+        findings,
+        section_header("4", "Effect of the position shift", style_map),
+        chart_block(
+            make_shift_chart(data),
+            "Figure 2. All models degrade after centered training is tested at random positions.",
+            style_map,
+        ),
+        PageBreak(),
+        *page_heading(
+            "VIT ABLATIONS",
+            "Patch Scale and Embedding",
+            "Two controlled changes to the shared Transformer configuration",
+            style_map,
+        ),
+        section_header("5", "Patch scale", style_map),
+        chart_block(
+            make_patch_chart(data),
+            "Figure 3. Patch size 8 gives the strongest observed trade-off.",
+            style_map,
+        ),
+        patch_table,
+        Spacer(1, 2.5 * mm),
+        Paragraph(
+            "Table 2. Accuracy (%) and total time for the A- and B-trained models.",
+            style_map["Caption"],
+        ),
+        side_note(
+            "<b>Result.</b> Patch size 8 leads on A -> A, A -> B, and B -> A. "
+            "Patch size 4 raises the token count to 256 and is slower without an "
+            "accuracy gain.",
+            style_map,
+        ),
+        section_header("6", "Patch embedding", style_map),
+        Paragraph(
+            "For non-overlapping patches, a strided Conv2d and a shared linear layer "
+            "perform the same type of patch-wise projection. Their results remain close.",
+            style_map["Body"],
+        ),
+        embedding_table,
+        Spacer(1, 2.5 * mm),
+        Paragraph(
+            "Table 3. Test accuracy (%) for patch size 16. Maximum absolute gap: 0.61 points.",
+            style_map["Caption"],
+        ),
+        PageBreak(),
+        *page_heading(
+            "DISCUSSION",
+            "Conclusions and Reproducibility",
+            "What the controlled comparisons support, and what they do not",
+            style_map,
+        ),
+        section_header("7", "Conclusions", style_map),
+        conclusions,
+        section_header("8", "Limitations", style_map),
+        limitations,
+        section_header("9", "Reproducibility", style_map),
+        reproducibility,
+        Spacer(1, 2 * mm),
+        Paragraph(
+            "python -m experiments.comparisons.run --groups all --download",
+            style_map["Code"],
+        ),
+        Spacer(1, 2 * mm),
+        side_note(
+            "<b>External record.</b> The teammate repository is retained only as provenance. "
+            "Its reported best values use a different checkpoint-selection procedure, so "
+            "they are not treated as a statistically equivalent baseline.",
+            style_map,
+        ),
+        section_header("10", "References", style_map),
+        Paragraph(
+            "[1] H. Xiao, K. Rasul, and R. Vollgraf. Fashion-MNIST: a Novel Image "
+            "Dataset for Benchmarking Machine Learning Algorithms. arXiv:1708.07747, 2017.",
+            style_map["Reference"],
+        ),
+        Paragraph(
+            "[2] A. Dosovitskiy et al. An Image is Worth 16x16 Words: Transformers for "
+            "Image Recognition at Scale. ICLR, 2021.",
+            style_map["Reference"],
+        ),
+        Paragraph(
+            "[3] Y. LeCun, L. Bottou, Y. Bengio, and P. Haffner. Gradient-Based Learning "
+            "Applied to Document Recognition. Proceedings of the IEEE, 1998.",
+            style_map["Reference"],
+        ),
+        Paragraph(
+            "[4] I. Loshchilov and F. Hutter. Decoupled Weight Decay Regularization. "
+            "ICLR, 2019.",
+            style_map["Reference"],
+        ),
+        Paragraph(
+            "[5] kicious. translated-fashion-mnist-vit, recorded commit "
+            "943fa7b. "
+            "https://github.com/kicious/translated-fashion-mnist-vit",
+            style_map["Reference"],
+        ),
+    ]
+    return story
+
+
+def build() -> Path:
     register_fonts()
-    styles = build_styles()
-    rows = read_metrics()
-    manifest = json.loads((RESULTS_DIR / "manifest.json").read_text(encoding="utf-8"))
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-
-    story: list = []
-    add_opening(story, styles)
-    add_method(story, styles, manifest)
-    add_overall_results(story, styles, rows)
-    add_model_comparison(story, styles, rows)
-    add_patch_size(story, styles, rows)
-    add_patch_embedding(story, styles, rows)
-    add_discussion(story, styles)
-    add_conclusion(story, styles)
-
-    ReportTemplate(str(output_path)).build(story)
-    return output_path
+    data = load_metrics()
+    style_map = build_styles()
+    OUTPUT_PATH.parent.mkdir(parents=True, exist_ok=True)
+    ReportDocument(str(OUTPUT_PATH)).build(build_story(data, style_map))
+    return OUTPUT_PATH
 
 
 if __name__ == "__main__":
-    print(build_report())
+    print(build())

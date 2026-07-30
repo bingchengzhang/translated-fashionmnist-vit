@@ -1,143 +1,75 @@
-# Position-Variable FashionMNIST Classification
+# Translated FashionMNIST: Position Generalization
 
-短学期课程项目。研究对象是服饰在画布中的位置变化对图像分类模型的影响。
+This project studies how image classifiers respond when object position changes
+between training and testing. Each 28 x 28 FashionMNIST image is placed on a
+64 x 64 black canvas:
 
-原始 FashionMNIST 图像为 `28×28`。实验将其放入 `64×64` 黑色画布，构造
-两种位置分布：
+- **A - random position:** the object is translated independently per sample.
+- **B - centered position:** the object is fixed at the canvas center.
 
-- **A：随机位置**。每张图像在画布范围内独立平移。
-- **B：固定位置**。每张图像均位于画布中心。
+The four evaluations are A -> A, B -> B, A -> B, and B -> A. The comparison
+study covers three questions:
 
-核心模型为带可学习绝对位置编码的 Vision Transformer。四项评价设置为
-A→A、B→B、A→B 和 B→A，其中箭头左侧表示训练分布，右侧表示测试分布。
+1. How do MLP, CNN, and ViT differ under a position shift?
+2. Which ViT patch size works best under the shared training budget?
+3. Does Conv2d patch embedding differ from Flatten + Linear?
 
-## 仓库内容
+## Results
+
+| Configuration | A -> A | B -> B | A -> B | B -> A |
+|---|---:|---:|---:|---:|
+| MLP | 71.89 | 89.57 | 71.97 | 13.99 |
+| CNN | **92.35** | **93.14** | **92.87** | **35.40** |
+| ViT, patch 16 | 80.07 | 88.87 | 80.97 | 16.91 |
+| ViT, patch 8 | 80.40 | 88.27 | 81.13 | 18.81 |
+| ViT, patch 4 | 75.28 | 87.22 | 74.97 | 17.02 |
+| ViT, Flatten + Linear | 79.67 | 88.80 | 80.48 | 16.30 |
+
+CNN is the strongest model in all four settings. Patch size 8 is the most
+balanced ViT configuration. The two patch-embedding implementations differ by
+at most 0.61 percentage points.
+
+## Repository layout
 
 ```text
-.
-├── datasets/                         # 位置可变数据集
-├── models/                           # ViT
-├── experiments/comparisons/          # 三组对比实验代码与复现说明
-├── results/comparisons/              # 指标、训练记录和报告图表
-├── reports/                          # 对比实验报告
-├── tests/                            # 数据、模型和实验配置测试
-├── train.py                          # 单模型训练
-├── run_experiments.py                # 基础四 setting 实验
-├── visualize_data.py                 # A/B 数据检查
-├── RESULTS.md                        # 基础实验记录
-└── CONTRIBUTIONS.md                  # 分工与来源说明
+datasets/                  translated FashionMNIST dataset
+models/                    ViT implementation
+experiments/comparisons/   comparison models, protocol, runner, and plots
+results/comparisons/       metrics, run records, and generated figures
+reports/                   report source and final PDF
+tests/                     dataset, model, and protocol checks
+tools/                     submission builder
 ```
 
-## 基础实验
-
-默认配置：
-
-- ViT：embedding dimension 128，4 层 encoder，4 个注意力头；
-- 画布 `64×64`，patch size 8；
-- AdamW，15 epochs，seed 42；
-- FashionMNIST 官方训练集按 90%/10% 划分训练集和验证集；
-- 最佳 checkpoint 由验证集选择，官方测试集仅用于最终评价。
-
-| Setting | Train | Test | Accuracy |
-|---:|:---:|:---:|---:|
-| 1 | A | A | 79.00% |
-| 2 | B | B | 87.83% |
-| 3 | A | B | 79.87% |
-| 4 | B | A | 25.66% |
-
-随机位置训练能够覆盖居中测试分布；只在中心位置训练时，模型对随机平移的
-泛化明显不足。完整配置和训练曲线见 [RESULTS.md](RESULTS.md)。
-
-![Four-setting baseline](assets/four_settings_summary.png)
-
-## 三组对比实验
-
-对比实验代码位于
-[experiments/comparisons](experiments/comparisons/README.md)，
-包含三组对比：
-
-1. MLP、CNN、ViT；
-2. ViT patch size 4、8、16；
-3. Conv2d 与 Flatten+Linear patch embedding。
-
-所有配置采用同一数据划分和评价协议。训练结果、图表和可直接用于报告的结果
-表保存在该目录中。外部参考来自
-[kicious/translated-fashion-mnist-vit](https://github.com/kicious/translated-fashion-mnist-vit)
-的公开训练记录；来源 commit 和指标口径均在目录内注明。
-
-## 环境
-
-当前 WSL 环境：
-
-- Python 3.12
-- PyTorch 2.11
-- CUDA 12.8
-- NVIDIA GeForce RTX 5070 Laptop GPU
-
-```bash
-source ~/miniconda3/etc/profile.d/conda.sh
-conda activate torch101
-cd /home/bccc/dl-course
-```
-
-安装依赖：
+## Reproduce the comparison study
 
 ```bash
 python -m pip install -r requirements.txt
-```
-
-## 运行基础实验
-
-检查数据和模型：
-
-```bash
 python -m unittest discover -s tests -v
-python visualize_data.py
-```
-
-运行基础四 setting：
-
-```bash
-python run_experiments.py \
-  --epochs 15 \
-  --batch-size 128 \
-  --canvas-size 64 \
-  --patch-size 8 \
-  --output-dir outputs/four_settings
-```
-
-运行 bc 的全部可选实验：
-
-```bash
 python -m experiments.comparisons.run \
   --groups all \
   --epochs 15 \
-  --batch-size 64
+  --batch-size 64 \
+  --num-workers 4 \
+  --download
 ```
 
-详细参数、输出文件和口径说明见
-[对比实验说明](experiments/comparisons/README.md)。
+The official training set is split 90%/10% for training and validation. The
+best validation checkpoint is selected before evaluation on the official test
+set. Formal runs use seed 42.
 
-最终对比实验报告见
-[reports/comparison_study.pdf](reports/comparison_study.pdf)。报告采用精简论文式结构，
-只讨论三组对比；代码附件与报告分开提交。
+## Report and submission
 
-生成助教验收用提交包：
+- Final report: [`reports/comparison_study.pdf`](reports/comparison_study.pdf)
+- Formal metrics: [`results/comparisons/metrics.csv`](results/comparisons/metrics.csv)
+- Build the compact submission: `python tools/build_submission.py`
 
-```bash
-python tools/build_code_archive.py
-```
+The submission archive contains four visible files: the report, metrics,
+source-code archive, and a short reading guide. Datasets, checkpoints, caches,
+and per-epoch run files are excluded.
 
-压缩包以 `README_FIRST.md` 为唯一入口，包含报告、正式指标、5 幅核心图、复现实验
-源码和一键验收脚本；不包含原始数据、checkpoint 或缓存文件。
+## Attribution
 
-## 数据与版本控制
-
-原始数据、生成数据、checkpoint 和临时输出不提交到 Git。仓库保留代码、
-配置、汇总指标和报告所需图表，以便复核实验结论，同时避免将可再生成的大文件
-写入版本历史。
-
-## 分工
-
-bc 负责可选实验的设计、代码、训练、可视化和文档。基础实现与外部对照来源见
-[CONTRIBUTIONS.md](CONTRIBUTIONS.md)。
+The optional experiments, training runs, visualizations, and report are
+credited to **bc**. The teammate repository is used only as an external record;
+see [`CONTRIBUTIONS.md`](CONTRIBUTIONS.md) for provenance and protocol notes.

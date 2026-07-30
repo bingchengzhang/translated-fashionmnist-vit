@@ -1,18 +1,14 @@
-# Translated FashionMNIST: Position Generalization
+# Translated FashionMNIST
 
-This project studies how image classifiers respond when object position changes
-between training and testing. Each 28 x 28 FashionMNIST image is placed on a
-64 x 64 black canvas:
+A compact PyTorch project for studying position generalization on FashionMNIST.
+Each 28 x 28 object is placed on a 64 x 64 canvas using one of two distributions:
 
-- **A - random position:** the object is translated independently per sample.
-- **B - centered position:** the object is fixed at the canvas center.
+- **A:** random position
+- **B:** centered position
 
-The four evaluations are A -> A, B -> B, A -> B, and B -> A. The comparison
-study covers three questions:
-
-1. How do MLP, CNN, and ViT differ under a position shift?
-2. Which ViT patch size works best under the shared training budget?
-3. Does Conv2d patch embedding differ from Flatten + Linear?
+Models are evaluated on A -> A, B -> B, A -> B, and B -> A. The repository
+contains the original ViT baseline and three optional comparisons in one shared
+Python package.
 
 ## Results
 
@@ -25,28 +21,42 @@ study covers three questions:
 | ViT, patch 4 | 75.28 | 87.22 | 74.97 | 17.02 |
 | ViT, Flatten + Linear | 79.67 | 88.80 | 80.48 | 16.30 |
 
-CNN is the strongest model in all four settings. Patch size 8 is the most
-balanced ViT configuration. The two patch-embedding implementations differ by
-at most 0.61 percentage points.
+CNN is strongest in all four settings. Patch size 8 is the most balanced ViT
+configuration. Conv2d and Flatten + Linear patch embeddings differ by at most
+0.61 percentage points.
 
-## Repository layout
+## Structure
 
 ```text
-datasets/                  translated FashionMNIST dataset
-models/                    ViT implementation
-experiments/comparisons/   comparison models, protocol, runner, and plots
-results/comparisons/       metrics, run records, and generated figures
-reports/                   report source and final PDF
-tests/                     dataset, model, and protocol checks
-tools/                     submission builder
+translated_fashionmnist/   shared data, models, training, and experiments
+results/                    metrics, consolidated history, and three figures
+reports/                    final PDF and reproducible report source
+tests/                      eight dataset, model, and protocol tests
+tools/                      compact submission builder
 ```
 
-## Reproduce the comparison study
+The former `datasets/`, `models/`, `experiments/`, and root-level training
+scripts are unified under `translated_fashionmnist/`.
+
+## Commands
+
+Install and test:
 
 ```bash
 python -m pip install -r requirements.txt
 python -m unittest discover -s tests -v
-python -m experiments.comparisons.run \
+```
+
+Run the original four-setting ViT baseline:
+
+```bash
+python -m translated_fashionmnist.baseline
+```
+
+Run all optional comparisons:
+
+```bash
+python -m translated_fashionmnist.comparisons.run \
   --groups all \
   --epochs 15 \
   --batch-size 64 \
@@ -54,22 +64,30 @@ python -m experiments.comparisons.run \
   --download
 ```
 
-The official training set is split 90%/10% for training and validation. The
-best validation checkpoint is selected before evaluation on the official test
-set. Formal runs use seed 42.
+Visualize the two data distributions:
 
-## Report and submission
+```bash
+python -m translated_fashionmnist.visualize
+```
 
-- Final report: [`reports/comparison_study.pdf`](reports/comparison_study.pdf)
-- Formal metrics: [`results/comparisons/metrics.csv`](results/comparisons/metrics.csv)
-- Build the compact submission: `python tools/build_submission.py`
+Formal runs use seed 42, a fixed 90%/10% training-validation split, and
+validation-based checkpoint selection. The official test set is reserved for
+final evaluation.
 
-The submission archive contains four visible files: the report, metrics,
-source-code archive, and a short reading guide. Datasets, checkpoints, caches,
-and per-epoch run files are excluded.
+## Deliverables
+
+- [Final report](reports/comparison_study.pdf)
+- [Result record](results/README.md)
+- [Formal metrics](results/metrics.csv)
+
+Build the four-file teaching-assistant submission:
+
+```bash
+python tools/build_submission.py
+```
 
 ## Attribution
 
-The optional experiments, training runs, visualizations, and report are
-credited to **bc**. The teammate repository is used only as an external record;
-see [`CONTRIBUTIONS.md`](CONTRIBUTIONS.md) for provenance and protocol notes.
+The optional comparisons, training runs, report, and packaging are credited to
+**bc**. The teammate repository is retained only as an external record; details
+are in [CONTRIBUTIONS.md](CONTRIBUTIONS.md).

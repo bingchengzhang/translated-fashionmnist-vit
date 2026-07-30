@@ -27,7 +27,7 @@ from reportlab.platypus import (
 
 
 ROOT = Path(__file__).resolve().parents[1]
-METRICS_PATH = ROOT / "results" / "comparisons" / "metrics.csv"
+METRICS_PATH = ROOT / "results" / "metrics.csv"
 OUTPUT_PATH = ROOT / "reports" / "comparison_study.pdf"
 FONT_DIR = ROOT / "reports" / "fonts"
 
@@ -905,11 +905,11 @@ def build_story(data: dict[str, dict], style_map) -> list:
             ],
             [
                 Paragraph("Code", style_map["TableCell"]),
-                Paragraph("experiments/comparisons", style_map["TableCell"]),
+                Paragraph("translated_fashionmnist/comparisons", style_map["TableCell"]),
             ],
             [
                 Paragraph("Metrics", style_map["TableCell"]),
-                Paragraph("results/comparisons/metrics.csv", style_map["TableCell"]),
+                Paragraph("results/metrics.csv", style_map["TableCell"]),
             ],
             [
                 Paragraph("Seed / epochs", style_map["TableCell"]),
@@ -1065,7 +1065,7 @@ def build_story(data: dict[str, dict], style_map) -> list:
         reproducibility,
         Spacer(1, 2 * mm),
         Paragraph(
-            "python -m experiments.comparisons.run --groups all --download",
+            "python -m translated_fashionmnist.comparisons.run --groups all --download",
             style_map["Code"],
         ),
         Spacer(1, 2 * mm),

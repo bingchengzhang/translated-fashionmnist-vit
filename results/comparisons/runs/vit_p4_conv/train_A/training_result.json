@@ -1,9 +1,0 @@
-{
-  "config_id": "vit_p4_conv",
-  "train_mode": "A",
-  "best_epoch": 15,
-  "best_val_accuracy": 0.7585,
-  "elapsed_seconds": 273.48058915138245,
-  "parameter_count": 829834,
-  "checkpoint": "results/comparisons/runs/vit_p4_conv/train_A/best.pt"
-}

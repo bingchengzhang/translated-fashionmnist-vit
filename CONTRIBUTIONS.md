@@ -17,6 +17,6 @@ No source code from that repository is copied or modified here.
 
 Four public summary metrics were recorded at commit
 `943fa7b68730bc8ea7786bb41c7b8dc1d488883a` in
-`experiments/comparisons/references/teammate_vit.csv`. Because its checkpoint
+`translated_fashionmnist/comparisons/references/teammate_vit.csv`. Because its checkpoint
 selection procedure differs from this project, the values are used only for
 provenance and scale checking.

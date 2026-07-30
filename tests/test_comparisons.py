@@ -4,14 +4,14 @@ import unittest
 
 import torch
 
-from models.vit import ConvPatchEmbedding, LinearPatchEmbedding
-from experiments.comparisons.configs import (
+from translated_fashionmnist.models import ConvPatchEmbedding, LinearPatchEmbedding
+from translated_fashionmnist.comparisons.configs import (
     EXPERIMENTS,
     GROUPS,
     SETTING_ORDER,
     configuration_ids_for_groups,
 )
-from experiments.comparisons.models import (
+from translated_fashionmnist.comparisons.models import (
     build_model,
     count_trainable_parameters,
 )

@@ -9,6 +9,6 @@ Build it from the repository root:
 python reports/build_comparison_report.py
 ```
 
-The script reads `results/comparisons/metrics.csv` and draws all charts as
+The script reads `results/metrics.csv` and draws all charts as
 vectors. Source Serif 4 and Source Sans 3 are embedded from `reports/fonts/`;
 both families are distributed under the SIL Open Font License.

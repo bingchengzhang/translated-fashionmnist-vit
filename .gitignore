@@ -9,7 +9,7 @@ outputs/
 checkpoints/
 *.pt
 *.pth
-results/comparisons_smoke/
+results_smoke/
 dist/
 
 # Environments and editors

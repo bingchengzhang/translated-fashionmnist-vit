@@ -1,8 +1,9 @@
-"""Build the five-page English comparison report."""
+"""Build the eight-page English comparison report."""
 
 from __future__ import annotations
 
 import csv
+import json
 from pathlib import Path
 
 from reportlab.graphics.shapes import Circle, Drawing, Line, PolyLine, Rect, String
@@ -16,6 +17,7 @@ from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.platypus import (
     BaseDocTemplate,
     Frame,
+    Image,
     KeepTogether,
     PageBreak,
     PageTemplate,
@@ -29,7 +31,9 @@ from reportlab.platypus import (
 ROOT = Path(__file__).resolve().parents[1]
 METRICS_PATH = ROOT / "results" / "metrics.csv"
 HISTORY_PATH = ROOT / "results" / "training_history.csv"
+MANIFEST_PATH = ROOT / "results" / "manifest.json"
 OUTPUT_PATH = ROOT / "reports" / "comparison_study.pdf"
+SAMPLE_PATH = ROOT / "reports" / "data_samples.png"
 FONT_DIR = ROOT / "reports" / "fonts"
 
 INK = colors.HexColor("#182532")
@@ -153,6 +157,37 @@ def load_training_history() -> dict[tuple[str, str], list[dict[str, float]]]:
         if [record["epoch"] for record in records] != list(range(1, 16)):
             raise ValueError(f"Non-contiguous history for {key}.")
     return histories
+
+
+def load_manifest() -> dict:
+    """Load the recorded protocol and environment used by the report."""
+    manifest = json.loads(MANIFEST_PATH.read_text(encoding="utf-8"))
+    if set(manifest.get("configurations", [])) != REPORT_CONFIG_IDS:
+        raise ValueError("Manifest does not describe the six report configurations.")
+    if manifest.get("fit_count") != 12 or manifest.get("evaluation_count") != 24:
+        raise ValueError("Manifest must record 12 fits and 24 evaluations.")
+    required_sections = {"protocol", "method", "environment"}
+    if not required_sections.issubset(manifest):
+        raise ValueError("Manifest is missing protocol, method, or environment details.")
+    required_protocol = {
+        "canvas_size",
+        "epochs",
+        "batch_size",
+        "learning_rate",
+        "weight_decay",
+        "val_fraction",
+        "seed",
+        "amp",
+    }
+    required_method = {"loss", "optimizer", "scheduler", "checkpoint"}
+    required_environment = {"torch", "cuda", "gpu", "platform"}
+    if not required_protocol.issubset(manifest["protocol"]):
+        raise ValueError("Manifest protocol is incomplete.")
+    if not required_method.issubset(manifest["method"]):
+        raise ValueError("Manifest method is incomplete.")
+    if not required_environment.issubset(manifest["environment"]):
+        raise ValueError("Manifest environment is incomplete.")
+    return manifest
 
 
 def build_styles() -> dict[str, ParagraphStyle]:
@@ -370,7 +405,7 @@ class ReportDocument(BaseDocTemplate):
             bottomMargin=17 * mm,
             title="Position Generalization in Translated FashionMNIST",
             author="",
-            subject="Architecture, patch scale, and patch embedding comparisons",
+            subject="Architecture, patch scale, and patch projection comparisons",
         )
         frame = Frame(
             self.leftMargin,
@@ -383,16 +418,14 @@ class ReportDocument(BaseDocTemplate):
             topPadding=0,
             bottomPadding=0,
         )
-        self.addPageTemplates([PageTemplate(id="academic", frames=frame, onPage=self.decorate)])
+        self.addPageTemplates(
+            [PageTemplate(id="academic", frames=frame, onPageEnd=self.decorate)]
+        )
 
     def decorate(self, canvas, document) -> None:
         canvas.saveState()
-        canvas.setStrokeColor(RULE)
-        canvas.setLineWidth(0.45)
-        canvas.line(23 * mm, 13 * mm, A4[0] - 23 * mm, 13 * mm)
         canvas.setFont("SourceSans", 7.5)
         canvas.setFillColor(MUTED)
-        canvas.drawString(23 * mm, 8.5 * mm, "TRANSLATED FASHIONMNIST COMPARISON STUDY")
         canvas.drawRightString(A4[0] - 23 * mm, 8.5 * mm, f"{document.page}")
         canvas.restoreState()
 
@@ -487,27 +520,28 @@ def chart_block(drawing: Drawing, caption: str, style_map) -> KeepTogether:
     return KeepTogether([drawing, Paragraph(caption, style_map["Caption"])])
 
 
-def make_dataset_geometry() -> Drawing:
-    """Explain the only distributional change in the experiment."""
-    width, height = 164 * mm, 33 * mm
-    panel_width = 79 * mm
-    drawing = Drawing(width, height)
-
-    def add_panel(
-        x: float,
-        *,
-        mode: str,
-        title: str,
-        object_offset: tuple[float, float],
-        line_one: str,
-        line_two: str,
-    ) -> None:
+def make_protocol_flow() -> Drawing:
+    """Show how each configuration produces its four reported measurements."""
+    drawing = Drawing(164 * mm, 35 * mm)
+    steps = (
+        ("FIXED SPLIT", "54,000 train", "6,000 validation"),
+        ("POSITION RULE", "fit on A or B", "fixed per sample"),
+        ("OPTIMIZE", "15 epochs", "AdamW + cosine"),
+        ("SELECT", "best validation", "checkpoint"),
+        ("FINAL TEST", "evaluate on A", "and on B"),
+    )
+    box_width = 75
+    box_height = 55
+    gap = (164 * mm - len(steps) * box_width) / (len(steps) - 1)
+    y = 23
+    for index, (title, line_one, line_two) in enumerate(steps):
+        x = index * (box_width + gap)
         drawing.add(
             Rect(
                 x,
-                0,
-                panel_width,
-                height,
+                y,
+                box_width,
+                box_height,
                 rx=4,
                 ry=4,
                 fillColor=PALE,
@@ -515,94 +549,233 @@ def make_dataset_geometry() -> Drawing:
                 strokeWidth=0.55,
             )
         )
-        canvas_x, canvas_y, canvas_size = x + 10, 10, 72
-        drawing.add(
-            Rect(
-                canvas_x,
-                canvas_y,
-                canvas_size,
-                canvas_size,
-                fillColor=colors.HexColor("#1C252C"),
-                strokeColor=NAVY,
-                strokeWidth=0.6,
-            )
-        )
-        object_x = canvas_x + object_offset[0]
-        object_y = canvas_y + object_offset[1]
-        drawing.add(
-            Rect(
-                object_x,
-                object_y,
-                31.5,
-                31.5,
-                rx=3,
-                ry=3,
-                fillColor=colors.HexColor("#DCE3E7"),
-                strokeColor=colors.white,
-                strokeWidth=0.45,
-            )
-        )
-        drawing.add(
-            Line(
-                object_x + 6,
-                object_y + 17,
-                object_x + 25.5,
-                object_y + 17,
-                strokeColor=GRAY,
-                strokeWidth=1.3,
-            )
-        )
         drawing.add(
             String(
-                x + 95,
-                79,
-                f"MODE {mode}",
-                fontName="SourceSans-Semibold",
-                fontSize=7.6,
-                fillColor=ACCENT,
-            )
-        )
-        drawing.add(
-            String(
-                x + 95,
-                62,
+                x + box_width / 2,
+                y + 39,
                 title,
-                fontName="SourceSerif-Semibold",
-                fontSize=12,
-                fillColor=INK,
+                fontName="SourceSans-Semibold",
+                fontSize=7.2,
+                fillColor=ACCENT,
+                textAnchor="middle",
             )
         )
-        for y, line, size in (
-            (40, line_one, 7.6),
-            (26, line_two, 7.6),
-            (12, "28 x 28 object / 64 x 64 canvas", 7.1),
-        ):
+        for offset, line in ((24, line_one), (12, line_two)):
             drawing.add(
                 String(
-                    x + 95,
-                    y,
+                    x + box_width / 2,
+                    y + offset,
                     line,
                     fontName="SourceSans",
-                    fontSize=size,
-                    fillColor=MUTED,
+                    fontSize=7.2,
+                    fillColor=INK,
+                    textAnchor="middle",
                 )
             )
-
-    add_panel(
-        0,
-        mode="A",
-        title="Random position",
-        object_offset=(31, 8),
-        line_one="top-left x,y in {0,...,36}",
-        line_two="37 x 37 = 1,369 locations",
+        if index < len(steps) - 1:
+            start = x + box_width + 3
+            end = x + box_width + gap - 3
+            center_y = y + box_height / 2
+            drawing.add(
+                Line(start, center_y, end, center_y, strokeColor=GRAY, strokeWidth=0.9)
+            )
+            drawing.add(
+                PolyLine(
+                    [
+                        (end - 4, center_y + 3),
+                        (end, center_y),
+                        (end - 4, center_y - 3),
+                    ],
+                    strokeColor=GRAY,
+                    strokeWidth=0.9,
+                    fillColor=None,
+                )
+            )
+    drawing.add(
+        String(
+            82 * mm,
+            5,
+            "One configuration: two fits and four held-out test measurements",
+            fontName="SourceSans",
+            fontSize=7.2,
+            fillColor=MUTED,
+            textAnchor="middle",
+        )
     )
-    add_panel(
-        85 * mm,
-        mode="B",
-        title="Centered",
-        object_offset=(20.25, 20.25),
-        line_one="top-left coordinate (18,18)",
-        line_two="one fixed location",
+    return drawing
+
+
+def make_vit_pipeline() -> Drawing:
+    """Summarize the exact ViT used in the controlled ablations."""
+    drawing = Drawing(164 * mm, 52 * mm)
+    steps = (
+        ("IMAGE", "1 x 64 x 64", "grayscale"),
+        ("PATCH TOKENS", "p in {4, 8, 16}", "d = 128"),
+        ("SEQUENCE", "prepend [CLS]", "+ learned abs. pos."),
+        ("ENCODER x 4", "4-head attention", "FFN 512 / GELU"),
+        ("CLASSIFIER", "[CLS] vector", "linear -> 10"),
+    )
+    box_width = 82
+    box_height = 72
+    gap = (164 * mm - len(steps) * box_width) / (len(steps) - 1)
+    y = 35
+    for index, (title, line_one, line_two) in enumerate(steps):
+        x = index * (box_width + gap)
+        fill = PALE_BLUE if index in (2, 3) else PALE
+        drawing.add(
+            Rect(
+                x,
+                y,
+                box_width,
+                box_height,
+                rx=4,
+                ry=4,
+                fillColor=fill,
+                strokeColor=RULE,
+                strokeWidth=0.55,
+            )
+        )
+        drawing.add(
+            String(
+                x + box_width / 2,
+                y + 52,
+                title,
+                fontName="SourceSans-Semibold",
+                fontSize=7.3,
+                fillColor=ACCENT,
+                textAnchor="middle",
+            )
+        )
+        drawing.add(
+            String(
+                x + box_width / 2,
+                y + 32,
+                line_one,
+                fontName="SourceSerif-Semibold",
+                fontSize=8.7,
+                fillColor=INK,
+                textAnchor="middle",
+            )
+        )
+        drawing.add(
+            String(
+                x + box_width / 2,
+                y + 17,
+                line_two,
+                fontName="SourceSans",
+                fontSize=7,
+                fillColor=MUTED,
+                textAnchor="middle",
+            )
+        )
+        if index < len(steps) - 1:
+            start = x + box_width + 2
+            end = x + box_width + gap - 2
+            center_y = y + box_height / 2
+            drawing.add(
+                Line(start, center_y, end, center_y, strokeColor=GRAY, strokeWidth=0.9)
+            )
+            drawing.add(
+                PolyLine(
+                    [
+                        (end - 4, center_y + 3),
+                        (end, center_y),
+                        (end - 4, center_y - 3),
+                    ],
+                    strokeColor=GRAY,
+                    strokeWidth=0.9,
+                    fillColor=None,
+                )
+            )
+    drawing.add(
+        String(
+            82 * mm,
+            15,
+            "Pre-norm Transformer; dropout 0.1; non-overlapping patches",
+            fontName="SourceSans",
+            fontSize=7.4,
+            fillColor=MUTED,
+            textAnchor="middle",
+        )
+    )
+    return drawing
+
+
+def make_embedding_equivalence() -> Drawing:
+    """Contrast the two patch-projection implementations used at p=16."""
+    drawing = Drawing(164 * mm, 39 * mm)
+    panel_width = 79 * mm
+    panels = (
+        (
+            0,
+            "CONV2D PROJECTION",
+            "kernel = stride = 16",
+            "1 x 16 x 16 -> 128 channels",
+        ),
+        (
+            85 * mm,
+            "FLATTEN + LINEAR",
+            "unfold into 16 x 16 patches",
+            "256-vector -> shared Linear(256,128)",
+        ),
+    )
+    for x, title, line_one, line_two in panels:
+        drawing.add(
+            Rect(
+                x,
+                31,
+                panel_width,
+                64,
+                rx=4,
+                ry=4,
+                fillColor=PALE,
+                strokeColor=RULE,
+                strokeWidth=0.55,
+            )
+        )
+        drawing.add(
+            String(
+                x + panel_width / 2,
+                74,
+                title,
+                fontName="SourceSans-Semibold",
+                fontSize=7.4,
+                fillColor=ACCENT,
+                textAnchor="middle",
+            )
+        )
+        drawing.add(
+            String(
+                x + panel_width / 2,
+                55,
+                line_one,
+                fontName="SourceSerif-Semibold",
+                fontSize=8.7,
+                fillColor=INK,
+                textAnchor="middle",
+            )
+        )
+        drawing.add(
+            String(
+                x + panel_width / 2,
+                40,
+                line_two,
+                fontName="SourceSans",
+                fontSize=7.2,
+                fillColor=MUTED,
+                textAnchor="middle",
+            )
+        )
+    drawing.add(
+        String(
+            82 * mm,
+            11,
+            "Both return 16 tokens x 128 dimensions and represent the same affine map",
+            fontName="SourceSans",
+            fontSize=7.5,
+            fillColor=NAVY,
+            textAnchor="middle",
+        )
     )
     return drawing
 
@@ -764,12 +937,13 @@ def add_axes(
 
 
 def make_hard_transfer_chart(data: dict[str, dict]) -> Drawing:
-    drawing = Drawing(465, 185)
+    drawing = Drawing(465, 235)
     left, bottom, width, height = add_axes(
         drawing,
         maximum=45,
         steps=3,
         title="Accuracy on fixed-center train -> random-position test",
+        height=170,
     )
     config_ids = ("mlp", "cnn", "vit_p8_conv")
     labels = ("MLP", "CNN", "ViT / 8")
@@ -877,12 +1051,13 @@ def make_shift_chart(data: dict[str, dict]) -> Drawing:
 
 
 def make_patch_chart(data: dict[str, dict]) -> Drawing:
-    drawing = Drawing(465, 185)
+    drawing = Drawing(465, 235)
     left, bottom, width, height = add_axes(
         drawing,
         maximum=100,
         steps=4,
-        title="Patch-size ablation under the shared ViT training budget",
+        title="Random-position test accuracy by training distribution",
+        height=170,
     )
     config_ids = ("vit_p4_conv", "vit_p8_conv", "vit_p16_conv")
     labels = ("4", "8", "16")
@@ -930,10 +1105,10 @@ def make_patch_chart(data: dict[str, dict]) -> Drawing:
                 textAnchor="middle",
             )
         )
-    drawing.add(Rect(329, 171, 8, 5, fillColor=BLUE, strokeColor=None))
-    drawing.add(String(341, 170, "A -> A", fontName="SourceSans", fontSize=7.2, fillColor=MUTED))
-    drawing.add(Rect(382, 171, 8, 5, fillColor=ORANGE, strokeColor=None))
-    drawing.add(String(394, 170, "B -> A", fontName="SourceSans", fontSize=7.2, fillColor=MUTED))
+    drawing.add(Rect(329, 221, 8, 5, fillColor=BLUE, strokeColor=None))
+    drawing.add(String(341, 220, "A -> A", fontName="SourceSans", fontSize=7.2, fillColor=MUTED))
+    drawing.add(Rect(382, 221, 8, 5, fillColor=ORANGE, strokeColor=None))
+    drawing.add(String(394, 220, "B -> A", fontName="SourceSans", fontSize=7.2, fillColor=MUTED))
     return drawing
 
 
@@ -985,8 +1160,18 @@ def accuracy_table(data: dict[str, dict], config_ids, labels, style_map) -> Tabl
 def build_story(
     data: dict[str, dict],
     histories: dict[tuple[str, str], list[dict[str, float]]],
+    manifest: dict,
     style_map,
 ) -> list:
+    protocol = manifest["protocol"]
+    method = manifest["method"]
+    environment = manifest["environment"]
+    configuration_count = len(manifest["configurations"])
+    fit_count = int(manifest["fit_count"])
+    evaluation_count = int(manifest["evaluation_count"])
+    validation_samples = round(60_000 * float(protocol["val_fraction"]))
+    training_samples = 60_000 - validation_samples
+
     protocol_table = ruled_table(
         [
             [
@@ -1032,38 +1217,132 @@ def build_story(
             [
                 Paragraph("Data", style_map["TableCell"]),
                 Paragraph(
-                    "28 x 28 FashionMNIST image on a 64 x 64 black canvas",
+                    f"28 x 28 FashionMNIST image on a {protocol['canvas_size']} x "
+                    f"{protocol['canvas_size']} black canvas",
                     style_map["TableCell"],
                 ),
             ],
             [
                 Paragraph("Split", style_map["TableCell"]),
                 Paragraph(
-                    "54,000 train, 6,000 validation; official 10,000-image test set held out",
+                    f"{training_samples:,} train, {validation_samples:,} validation; "
+                    "official 10,000-image test set held out",
                     style_map["TableCell"],
                 ),
             ],
             [
                 Paragraph("Training", style_map["TableCell"]),
                 Paragraph(
-                    "15 epochs; batch 64; AdamW, lr 1e-3, weight decay 1e-4",
+                    f"{protocol['epochs']} epochs; batch {protocol['batch_size']}; "
+                    f"{method['loss']}; {method['optimizer']}, "
+                    f"lr {float(protocol['learning_rate']):g}, "
+                    f"weight decay {float(protocol['weight_decay']):g}",
                     style_map["TableCell"],
                 ),
             ],
             [
                 Paragraph("Selection", style_map["TableCell"]),
-                Paragraph("best validation checkpoint", style_map["TableCell"]),
+                Paragraph(
+                    f"{method['scheduler']}; {method['checkpoint']} checkpoint",
+                    style_map["TableCell"],
+                ),
             ],
             [
                 Paragraph("Reporting", style_map["TableCell"]),
                 Paragraph(
-                    "top-1 test accuracy; elapsed training time; seed 42",
+                    f"top-1 test accuracy; elapsed training time; seed {protocol['seed']}",
                     style_map["TableCell"],
                 ),
             ],
         ],
         [34 * mm, 130 * mm],
+    )
+
+    comparison_table = ruled_table(
+        [
+            [
+                Paragraph("Group", style_map["TableHeader"]),
+                Paragraph("Configurations", style_map["TableHeader"]),
+                Paragraph("Changed factor / fixed factors", style_map["TableHeader"]),
+            ],
+            [
+                Paragraph("Architecture", style_map["TableCellStrong"]),
+                Paragraph("MLP, CNN, ViT p=8", style_map["TableCell"]),
+                Paragraph(
+                    "Architecture changes; split, optimizer, budget, and evaluation stay fixed.",
+                    style_map["TableCell"],
+                ),
+            ],
+            [
+                Paragraph("Patch scale", style_map["TableCellStrong"]),
+                Paragraph("ViT p=4, 8, 16", style_map["TableCell"]),
+                Paragraph(
+                    "Token grid changes; Transformer width, depth, heads, and projection type stay fixed.",
+                    style_map["TableCell"],
+                ),
+            ],
+            [
+                Paragraph("Projection", style_map["TableCellStrong"]),
+                Paragraph("Conv2d, Flatten + Linear", style_map["TableCell"]),
+                Paragraph(
+                    "Patch projection changes at p=16; the Transformer body is identical.",
+                    style_map["TableCell"],
+                ),
+            ],
+        ],
+        [30 * mm, 48 * mm, 86 * mm],
         compact=True,
+    )
+
+    model_table = ruled_table(
+        [
+            [
+                Paragraph("Model", style_map["TableHeader"]),
+                Paragraph("Core structure", style_map["TableHeader"]),
+                Paragraph("Spatial treatment", style_map["TableHeader"]),
+                Paragraph("Parameters", style_map["TableHeader"]),
+            ],
+            [
+                Paragraph("MLP", style_map["TableCellStrong"]),
+                Paragraph(
+                    "4096 -> 128 -> 128 -> 10; LayerNorm; GELU; dropout 0.1",
+                    style_map["TableCell"],
+                ),
+                Paragraph("absolute input pixels", style_map["TableCell"]),
+                Paragraph(
+                    f"{data['mlp']['parameters']:,}",
+                    style_map["TableCellCenter"],
+                ),
+            ],
+            [
+                Paragraph("CNN", style_map["TableCellStrong"]),
+                Paragraph(
+                    "channels 1-32-32-64-64-128; BatchNorm; two max-pools; "
+                    "adaptive 2 x 2 pool; 512 -> 128 -> 10",
+                    style_map["TableCell"],
+                ),
+                Paragraph("shared local filters", style_map["TableCell"]),
+                Paragraph(
+                    f"{data['cnn']['parameters']:,}",
+                    style_map["TableCellCenter"],
+                ),
+            ],
+            [
+                Paragraph("ViT", style_map["TableCellStrong"]),
+                Paragraph(
+                    "d=128; depth 4; heads 4; FFN 512; pre-norm; GELU; dropout 0.1",
+                    style_map["TableCell"],
+                ),
+                Paragraph("learned absolute position embedding", style_map["TableCell"]),
+                Paragraph(
+                    f"p4 {data['vit_p4_conv']['parameters']:,}<br/>"
+                    f"p8 {data['vit_p8_conv']['parameters']:,}<br/>"
+                    f"p16 {data['vit_p16_conv']['parameters']:,}",
+                    style_map["TableCellCenter"],
+                ),
+            ],
+        ],
+        [20 * mm, 72 * mm, 43 * mm, 29 * mm],
     )
 
     model_ids = ("mlp", "cnn", "vit_p8_conv")
@@ -1141,12 +1420,27 @@ def build_story(
         )
         for config_id in model_ids
     )
+    all_config_ids = (
+        "mlp",
+        "cnn",
+        "vit_p4_conv",
+        "vit_p8_conv",
+        "vit_p16_conv",
+        "vit_p16_linear",
+    )
+    all_random_to_center_max_change = max(
+        abs(
+            data[config_id]["accuracy"][("A", "B")]
+            - data[config_id]["accuracy"][("A", "A")]
+        )
+        for config_id in all_config_ids
+    )
     hard_transfer_drops = {
         config_id: (
             data[config_id]["accuracy"][("B", "B")]
             - data[config_id]["accuracy"][("B", "A")]
         )
-        for config_id in model_ids
+        for config_id in all_config_ids
     }
     hard_drop_min = min(hard_transfer_drops.values())
     hard_drop_max = max(hard_transfer_drops.values())
@@ -1255,15 +1549,53 @@ def build_story(
     embedding_table = ruled_table(embedding_rows, [41 * mm] * 4)
     embedding_gap_max = max(embedding_gaps)
 
+    shift_rows = [
+        [
+            Paragraph("Configuration", style_map["TableHeader"]),
+            Paragraph("A -> B minus A -> A", style_map["TableHeader"]),
+            Paragraph("B -> A minus B -> B", style_map["TableHeader"]),
+        ]
+    ]
+    shift_labels = (
+        "MLP",
+        "CNN",
+        "ViT, patch 4",
+        "ViT, patch 8",
+        "ViT, patch 16",
+        "ViT, p16 Linear",
+    )
+    for config_id, label in zip(all_config_ids, shift_labels):
+        a_delta = (
+            data[config_id]["accuracy"][("A", "B")]
+            - data[config_id]["accuracy"][("A", "A")]
+        )
+        b_delta = (
+            data[config_id]["accuracy"][("B", "A")]
+            - data[config_id]["accuracy"][("B", "B")]
+        )
+        shift_rows.append(
+            [
+                Paragraph(label, style_map["TableCell"]),
+                Paragraph(f"{a_delta:+.2f} pp", style_map["TableCellCenter"]),
+                Paragraph(f"{b_delta:+.2f} pp", style_map["TableCellCenter"]),
+            ]
+        )
+    shift_table = ruled_table(
+        shift_rows,
+        [68 * mm, 48 * mm, 48 * mm],
+        compact=True,
+    )
+
     conclusions = Table(
         [
             [
                 Paragraph("01", style_map["FindingValue"]),
                 Paragraph(
-                    "<b>Transfer is strongly asymmetric.</b> A-trained models stay within "
-                    f"{random_to_center_max_change:.2f} points at center, while B-trained "
-                    f"models lose {hard_drop_min:.2f}-{hard_drop_max:.2f} points at random "
-                    "positions. CNN leads all four settings.",
+                    "<b>Transfer is strongly asymmetric.</b> For A-trained models, the "
+                    f"absolute change at center is at most "
+                    f"{all_random_to_center_max_change:.2f} percentage points. B-trained "
+                    f"models drop by {hard_drop_min:.2f} to {hard_drop_max:.2f} points at "
+                    "random positions. CNN leads all four settings.",
                     style_map["BodySmall"],
                 ),
             ],
@@ -1278,7 +1610,7 @@ def build_story(
             [
                 Paragraph("03", style_map["FindingValue"]),
                 Paragraph(
-                    "<b>Equivalent embeddings stay close in this run.</b> Conv2d and "
+                    "<b>Equivalent patch projections stay close in this run.</b> Conv2d and "
                     f"Flatten + Linear differ by at most {embedding_gap_max:.2f} "
                     "percentage points.",
                     style_map["BodySmall"],
@@ -1297,67 +1629,6 @@ def build_story(
                 ("BOTTOMPADDING", (0, 0), (-1, -1), 7),
             ]
         ),
-    )
-
-    analysis_table = ruled_table(
-        [
-            [
-                Paragraph("Comparison", style_map["TableHeader"]),
-                Paragraph("Observed evidence", style_map["TableHeader"]),
-                Paragraph("Interpretation", style_map["TableHeader"]),
-            ],
-            [
-                Paragraph("Architecture", style_map["TableCellStrong"]),
-                Paragraph(
-                    f"CNN leads all four settings; B -> A = {cnn_hard_accuracy:.2f}%",
-                    style_map["TableCell"],
-                ),
-                Paragraph(
-                    "Local shared filters are a plausible advantage, but architecture "
-                    "and parameter count are not independently controlled.",
-                    style_map["TableCell"],
-                ),
-            ],
-            [
-                Paragraph("Position support", style_map["TableCellStrong"]),
-                Paragraph(
-                    f"A -> B changes at most {random_to_center_max_change:.2f} pp; "
-                    f"B -> A loses {hard_drop_min:.2f}-{hard_drop_max:.2f} pp",
-                    style_map["TableCell"],
-                ),
-                Paragraph(
-                    "Training on broad position support transfers to center; "
-                    "center-only training does not cover random positions.",
-                    style_map["TableCell"],
-                ),
-            ],
-            [
-                Paragraph("Patch scale", style_map["TableCellStrong"]),
-                Paragraph(
-                    "Patch 8 leads three settings; patch 16 is fastest; "
-                    "patch 4 uses 256 tokens",
-                    style_map["TableCell"],
-                ),
-                Paragraph(
-                    "Patch 8 gives the strongest accuracy-cost balance under the "
-                    "shared 15-epoch budget.",
-                    style_map["TableCell"],
-                ),
-            ],
-            [
-                Paragraph("Patch embedding", style_map["TableCellStrong"]),
-                Paragraph(
-                    f"Maximum Conv2d vs Linear gap = {embedding_gap_max:.2f} pp",
-                    style_map["TableCell"],
-                ),
-                Paragraph(
-                    "Equivalent affine projections produce numerically close results; "
-                    "the remaining gap is not a significance claim.",
-                    style_map["TableCell"],
-                ),
-            ],
-        ],
-        [31 * mm, 57 * mm, 76 * mm],
     )
 
     limitations = Table(
@@ -1400,27 +1671,31 @@ def build_story(
     )
 
     abstract = side_note(
-        "<i>Abstract.</i> Under one controlled recipe, transfer is asymmetric: model "
-        f"baselines trained on A change by at most {random_to_center_max_change:.2f} points "
-        f"at center, while those trained on B lose {hard_drop_min:.2f}-{hard_drop_max:.2f} "
-        f"points at random positions. CNN leads all four settings ({cnn_hard_accuracy:.2f}% "
-        "on B -> A). For ViT, patch size 8 leads three settings; Conv2d and Linear "
-        f"projections differ by at most {embedding_gap_max:.2f} points in this single-seed run.",
+        "<i>Abstract.</i> Six configurations were fitted on random or centered object "
+        f"positions. Across all six, the absolute A -> B change is at most "
+        f"{all_random_to_center_max_change:.2f} percentage points, whereas B -> A drops "
+        f"by {hard_drop_min:.2f} to {hard_drop_max:.2f} points. CNN leads all settings "
+        f"({cnn_hard_accuracy:.2f}% on B -> A). Patch size 8 leads three ViT settings; "
+        f"the two patch projections differ by at most {embedding_gap_max:.2f} points.",
         style_map,
     )
 
     story = [
-        Paragraph("COURSE PROJECT / COMPARISON STUDY", style_map["Kicker"]),
+        Paragraph("COURSE PROJECT / CONTROLLED COMPARISON", style_map["Kicker"]),
         Paragraph("Position Generalization in<br/>Translated FashionMNIST", style_map["Title"]),
         Paragraph(
-            "Architecture, patch scale, and patch embedding",
+            "Architecture, patch scale, and patch projection",
             style_map["Subtitle"],
         ),
         Table(
             [
                 [
-                    Paragraph("Final English report", style_map["Meta"]),
-                    Paragraph("12 fitted models / 24 test evaluations", style_map["Meta"]),
+                    Paragraph("Experimental report", style_map["Meta"]),
+                    Paragraph(
+                        f"{configuration_count} configurations / {fit_count} fits / "
+                        f"{evaluation_count} evaluations",
+                        style_map["Meta"],
+                    ),
                 ]
             ],
             colWidths=[82 * mm, 82 * mm],
@@ -1438,150 +1713,284 @@ def build_story(
         ),
         Spacer(1, 4 * mm),
         abstract,
-        section_header("1", "Question", style_map),
+        section_header("1", "Study question", style_map),
         Paragraph(
-            "A classifier may learn class appearance and object location together. "
-            "We isolate location by placing each 28 x 28 image either uniformly "
-            "over all valid integer positions (A) or at the canvas center (B).",
+            "A classifier can attach class evidence to location. To isolate this effect, "
+            "each 28 x 28 FashionMNIST image in A is assigned one deterministic position "
+            "sampled from the 1,369 valid integer locations; B always uses the centered "
+            "position. Placements are fixed per sample and split for a given seed. The "
+            "experiment asks which model choices retain accuracy when the test position "
+            "distribution changes.",
             style_map["Body"],
         ),
-        protocol_table,
-        section_header("2", "Experimental process", style_map),
+        Image(str(SAMPLE_PATH), width=164 * mm, height=48.6 * mm),
         Paragraph(
-            "Each of six configurations is fitted once on A and once on B. Validation "
-            "selects the checkpoint; both test distributions are then measured on the "
-            "same 10,000 held-out images, producing 12 fits and 24 final evaluations.",
-            style_map["Body"],
+            "Figure 1. Two official FashionMNIST items under A and B. The teal outline "
+            "marks the 28 x 28 source support; only its canvas position changes.",
+            style_map["Caption"],
         ),
-        controls_table,
-        Spacer(1, 3 * mm),
-        side_note(
-            "<b>Transfer direction.</b> B -> A expands from one observed location to "
-            "1,369 valid locations. A -> B evaluates one location already inside the "
-            "support of A.",
+        finding_strip(
+            [
+                ("POSITION SUPPORT", "1,369 vs 1", "A locations / B location"),
+                (
+                    "TRAINED MODELS",
+                    str(fit_count),
+                    f"{configuration_count} configurations x A/B",
+                ),
+                (
+                    "FINAL TESTS",
+                    str(evaluation_count),
+                    "four settings per configuration",
+                ),
+            ],
             style_map,
         ),
-        Spacer(1, 3 * mm),
-        make_dataset_geometry(),
+        section_header("1.1", "Questions tested", style_map),
+        finding_strip(
+            [
+                ("COMPARISON 1", "Architecture", "Which model handles B -> A?"),
+                ("COMPARISON 2", "Patch scale", "How does token count affect ViT?"),
+                ("COMPARISON 3", "Projection", "Do equivalent maps train alike?"),
+            ],
+            style_map,
+        ),
+        PageBreak(),
+        *page_heading(
+            "EXPERIMENTAL DESIGN",
+            "Controlled Protocol",
+            "One split, one training budget, and four evaluation settings",
+            style_map,
+        ),
+        section_header("2", "Evaluation matrix", style_map),
+        protocol_table,
+        Spacer(1, 2 * mm),
         Paragraph(
-            "Figure 1. Mode A placements are deterministic per sample and seed; the same "
-            "test placement seed is used for every configuration.",
+            "Table 1. The official test partition is used only after checkpoint selection.",
+            style_map["Caption"],
+        ),
+        section_header("3", "Controlled comparisons", style_map),
+        comparison_table,
+        Spacer(1, 2 * mm),
+        Paragraph(
+            "Table 2. Each group changes one stated design choice; the architecture group "
+            "is not parameter-matched.",
+            style_map["Caption"],
+        ),
+        section_header("4", "Run sequence", style_map),
+        make_protocol_flow(),
+        Paragraph(
+            "Figure 2. Every fit uses a validation checkpoint, then both held-out test "
+            "distributions are evaluated with shared deterministic placements.",
+            style_map["Caption"],
+        ),
+        side_note(
+            "<b>Direction matters.</b> B -> A extrapolates from one observed location "
+            "to 1,369 possible locations. A -> B evaluates a location already contained "
+            "in A's position support.",
+            style_map,
+        ),
+        PageBreak(),
+        *page_heading(
+            "MODEL AND TRAINING DETAILS",
+            "Implementations",
+            "Model size, positional representation, and optimization settings",
+            style_map,
+        ),
+        section_header("5", "Model definitions", style_map),
+        model_table,
+        Spacer(1, 2 * mm),
+        Paragraph(
+            "Table 3. Trainable parameter counts are taken from the fitted models.",
+            style_map["Caption"],
+        ),
+        section_header("6", "Vision Transformer", style_map),
+        make_vit_pipeline(),
+        Paragraph(
+            "Figure 3. ViT implementation shared by the patch-scale and projection studies.",
+            style_map["Caption"],
+        ),
+        side_note(
+            "<b>Position representation.</b> The ViT adds one learned absolute embedding "
+            "to each patch index. Translation equivariance is therefore not built into "
+            "the token sequence.",
+            style_map,
+        ),
+        section_header("7", "Training recipe", style_map),
+        controls_table,
+        Spacer(1, 2 * mm),
+        Paragraph(
+            f"Table 4. Formal environment: PyTorch {environment['torch']}; "
+            f"CUDA {environment['cuda']}; {environment['gpu']}; "
+            f"{environment['platform']}. Mixed precision "
+            f"{'enabled' if protocol['amp'] else 'disabled'}.",
             style_map["Caption"],
         ),
         PageBreak(),
         *page_heading(
             "EXPERIMENTAL PROCESS",
             "Learning Curves and Checkpoints",
-            "Validation behavior for the three architecture baselines over 15 epochs",
+            "Validation behavior for MLP, CNN, and patch-8 ViT over 15 epochs",
             style_map,
         ),
-        section_header("3", "Training dynamics", style_map),
+        section_header("8", "Training dynamics", style_map),
         chart_block(
             make_training_curve_chart(histories),
-            "Figure 2. Validation accuracy for A-trained and B-trained architecture baselines.",
+            "Figure 4. Validation accuracy for A-trained and B-trained architecture models.",
             style_map,
         ),
         best_validation_table,
         Spacer(1, 2.5 * mm),
         Paragraph(
-            "Table 1. Best validation accuracy and selected checkpoint epoch.",
+            "Table 5. Best validation accuracy and selected checkpoint epoch.",
             style_map["Caption"],
         ),
         side_note(
-            f"<b>Checkpoint evidence.</b> Every selected checkpoint occurs at epoch "
+            f"<b>Checkpoint selection.</b> The six checkpoints occur at epoch "
             f"{min(best_validation_epochs)} or {max(best_validation_epochs)}. CNN gives "
-            "the strongest validation accuracy on both position distributions; all three "
-            "models validate higher on the centered distribution.",
+            "the highest validation accuracy for both training distributions; each model "
+            "validates higher on centered images.",
             style_map,
         ),
         Spacer(1, 4 * mm),
         training_findings,
         PageBreak(),
         *page_heading(
-            "MODEL COMPARISON",
-            "Architecture and Position Shift",
-            "MLP (2 x 128), CNN (5 conv layers), and ViT (d=128, L=4, H=4, p=8)",
+            "ARCHITECTURE COMPARISON",
+            "MLP, CNN, and ViT",
+            "Shared data split and optimizer; model capacity is not matched",
             style_map,
         ),
-        section_header("4", "Architecture results", style_map),
+        section_header("9", "Test accuracy", style_map),
         architecture_table,
-        Spacer(1, 2.5 * mm),
+        Spacer(1, 2 * mm),
         Paragraph(
-            "Table 2. Top-1 test accuracy (%); teal values mark column leaders.",
+            "Table 6. Top-1 test accuracy (%); teal values mark column leaders.",
             style_map["Caption"],
         ),
         chart_block(
             make_hard_transfer_chart(data),
-            f"Figure 3. CNN reaches {cnn_hard_accuracy:.2f}% on B -> A, "
+            f"Figure 5. CNN reaches {cnn_hard_accuracy:.2f}% on B -> A, "
             f"{cnn_advantage:.2f} points above patch-8 ViT.",
             style_map,
         ),
         findings,
-        section_header("5", "Position-shift analysis", style_map),
+        section_header("9.1", "Interpretation", style_map),
+        Paragraph(
+            "CNN leads all four settings despite having fewer parameters than the MLP "
+            "and ViT. Shared local filters are a plausible reason for the stronger shift "
+            "result, but this run does not separate architecture from parameter count or "
+            "model-specific hyperparameter tuning.",
+            style_map["Body"],
+        ),
+        PageBreak(),
+        *page_heading(
+            "POSITION-SHIFT ANALYSIS",
+            "The Transfer Asymmetry",
+            "Accuracy changes when the training and test position supports differ",
+            style_map,
+        ),
+        section_header("10", "Directional shift", style_map),
         chart_block(
             make_shift_chart(data),
-            f"Figure 4. Centered-only training loses {hard_drop_min:.2f}-"
+            f"Figure 6. Centered-only training drops by {hard_drop_min:.2f} to "
             f"{hard_drop_max:.2f} points under random-position testing.",
             style_map,
         ),
+        shift_table,
+        Spacer(1, 2 * mm),
+        Paragraph(
+            "Table 7. Signed test-distribution change for all six configurations.",
+            style_map["Caption"],
+        ),
+        side_note(
+            f"<b>Consistent pattern.</b> After training on A, moving the test objects to "
+            f"the center produces an absolute change of at most "
+            f"{all_random_to_center_max_change:.2f} percentage points. After training "
+            "on B, random placement removes at least "
+            f"{hard_drop_min:.2f} points.",
+            style_map,
+        ),
+        Spacer(1, 3 * mm),
+        Paragraph(
+            "The comparison supports a coverage explanation: A exposes the model to the "
+            "center and many off-center positions, whereas B provides no direct evidence "
+            "about most of A. The result does not imply that A is universally harder; it "
+            "shows that high B -> B accuracy is not evidence of translation robustness.",
+            style_map["Body"],
+        ),
         PageBreak(),
         *page_heading(
-            "VIT ABLATIONS",
-            "Patch Scale and Embedding",
+            "VIT ABLATION I",
+            "Patch Scale",
             "ViT body fixed at d=128, depth 4, four heads, and FFN width 512",
             style_map,
         ),
-        section_header("6", "Patch-scale results", style_map),
+        section_header("11", "Patch-size results", style_map),
         chart_block(
             make_patch_chart(data),
-            "Figure 5. Patch size 8 leads three of four evaluated settings.",
+            "Figure 7. Selected random-position outcomes; Table 8 reports all four settings.",
             style_map,
         ),
         patch_table,
-        Spacer(1, 2.5 * mm),
+        Spacer(1, 2 * mm),
         Paragraph(
-            "Table 3. Accuracy (%) and summed training time; teal marks leaders and fastest time.",
+            "Table 8. Accuracy (%) and summed training time; teal marks the best value "
+            "in each column.",
             style_map["Caption"],
         ),
         side_note(
-            "<b>Result.</b> Patch size 8 leads on A -> A, A -> B, and B -> A. "
-            "Patch size 4 raises the token count to 256 and is slower without an "
-            "accuracy gain.",
+            "<b>Observed trade-off.</b> Patch size 8 leads on A -> A, A -> B, and "
+            "B -> A. Patch size 4 expands the sequence to 256 tokens and takes longer "
+            "without improving accuracy under the shared 15-epoch budget.",
             style_map,
         ),
-        section_header("7", "Patch-embedding results", style_map),
+        Spacer(1, 3 * mm),
         Paragraph(
-            "For non-overlapping patches, Conv2d with kernel = stride = p and a shared "
-            "Linear layer on each flattened p x p patch implement the same affine map "
-            "when their weights are aligned. Their trained results remain close.",
+            "Patch size 16 is fastest and gives the best B -> B result. Under this "
+            "protocol, patch size 8 records the highest A -> A, A -> B, and B -> A "
+            "accuracy with 64 tokens. Runtime is descriptive because it depends on "
+            "hardware and execution order.",
             style_map["Body"],
         ),
-        embedding_table,
-        Spacer(1, 2.5 * mm),
-        Paragraph(
-            f"Table 4. Test accuracy (%) for patch size 16. Maximum absolute gap: "
-            f"{embedding_gap_max:.2f} points.",
-            style_map["Caption"],
+        Spacer(1, 2 * mm),
+        finding_strip(
+            [
+                ("PATCH 4", "65,536", "patch-patch pairs (N^2)"),
+                ("PATCH 8", "4,096", "patch-patch pairs (N^2)"),
+                ("PATCH 16", "256", "patch-patch pairs (N^2)"),
+            ],
+            style_map,
         ),
         PageBreak(),
         *page_heading(
-            "EXPERIMENTAL ANALYSIS",
-            "Integrated Findings",
-            "Evidence-based interpretation with explicit limits",
+            "VIT ABLATION II",
+            "Patch Projection",
+            "Conv2d and Flatten + Linear at patch size 16",
             style_map,
         ),
-        section_header("8", "Results and interpretation", style_map),
-        analysis_table,
-        Spacer(1, 3 * mm),
+        section_header("12", "Equivalent projections", style_map),
+        make_embedding_equivalence(),
+        Paragraph(
+            "Figure 8. With non-overlapping patches, the two implementations differ in "
+            "layout, not in the affine function they can represent.",
+            style_map["Caption"],
+        ),
+        embedding_table,
+        Spacer(1, 2 * mm),
+        Paragraph(
+            f"Table 9. Test accuracy (%) at p=16; maximum absolute gap "
+            f"{embedding_gap_max:.2f} points.",
+            style_map["Caption"],
+        ),
         side_note(
-            "<b>Main answer.</b> High centered-position accuracy does not imply translation "
-            "robustness. Exposure to varied positions during training is the decisive "
-            "difference between the two transfer directions in this experiment.",
+            "<b>Result.</b> The trained projections remain numerically close. Because the "
+            "record contains one seed, the residual gap is not treated as evidence that "
+            "either implementation is better.",
             style_map,
         ),
-        section_header("9", "Conclusions", style_map),
+        section_header("13", "Conclusions and limits", style_map),
         conclusions,
-        section_header("10", "Limitations", style_map),
+        Spacer(1, 2.5 * mm),
         limitations,
     ]
     return story
@@ -1589,11 +1998,16 @@ def build_story(
 
 def build() -> Path:
     register_fonts()
+    if not SAMPLE_PATH.is_file():
+        raise FileNotFoundError(f"Missing report sample figure: {SAMPLE_PATH}")
     data = load_metrics()
     histories = load_training_history()
+    manifest = load_manifest()
     style_map = build_styles()
     OUTPUT_PATH.parent.mkdir(parents=True, exist_ok=True)
-    ReportDocument(str(OUTPUT_PATH)).build(build_story(data, histories, style_map))
+    ReportDocument(str(OUTPUT_PATH)).build(
+        build_story(data, histories, manifest, style_map)
+    )
     return OUTPUT_PATH
 
 

@@ -1,4 +1,4 @@
-"""Generate the three core comparison figures."""
+"""Bar charts for the three comparison groups."""
 
 from __future__ import annotations
 
@@ -8,7 +8,6 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 
 from .config import EXPERIMENTS, GROUPS
-
 
 SETTING_LABELS = {
     1: "A -> A",
@@ -90,7 +89,7 @@ def generate_visualizations(
     results_csv: str | Path,
     figures_dir: str | Path,
 ) -> None:
-    """Generate one figure for each formal comparison group."""
+    """Write one bar chart per comparison group present in the CSV."""
     _configure_style()
     rows = read_results(results_csv)
     figures = Path(figures_dir)

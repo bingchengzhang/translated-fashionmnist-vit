@@ -1,18 +1,16 @@
-"""Shared training, serialization, and reproducibility utilities."""
+"""RNG seeding, metric averages, and CSV/JSON output."""
 
 from __future__ import annotations
 
 import csv
 import json
-import platform
 import random
-import sys
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any
 
 import numpy as np
 import torch
-import torchvision
 
 
 class AverageMeter:
@@ -82,28 +80,6 @@ def write_csv(rows: Iterable[dict[str, Any]], path: str | Path) -> None:
         writer.writerows(rows)
 
 
-def save_checkpoint(
-    path: str | Path,
-    model: torch.nn.Module,
-    optimizer: torch.optim.Optimizer,
-    epoch: int,
-    best_val_accuracy: float,
-    config: dict[str, Any],
-) -> None:
-    path = Path(path)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    torch.save(
-        {
-            "epoch": epoch,
-            "best_val_accuracy": best_val_accuracy,
-            "model_state": model.state_dict(),
-            "optimizer_state": optimizer.state_dict(),
-            "config": config,
-        },
-        path,
-    )
-
-
 def plot_history(history: list[dict[str, float]], path: str | Path) -> None:
     import matplotlib.pyplot as plt
 
@@ -135,31 +111,3 @@ def plot_history(history: list[dict[str, float]], path: str | Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     figure.savefig(path, dpi=180)
     plt.close(figure)
-
-
-def serializable_config(namespace: object) -> dict[str, Any]:
-    config = {}
-    for key, value in vars(namespace).items():
-        if isinstance(value, Path):
-            value = str(value)
-        config[key] = value
-    return config
-
-
-def system_summary(device: torch.device) -> dict[str, Any]:
-    summary: dict[str, Any] = {
-        "python": sys.version.split()[0],
-        "torch_version": torch.__version__,
-        "torchvision_version": torchvision.__version__,
-        "numpy_version": np.__version__,
-        "platform": platform.platform(),
-        "device": str(device),
-    }
-    if device.type == "cuda":
-        summary.update(
-            {
-                "cuda_version": torch.version.cuda,
-                "gpu": torch.cuda.get_device_name(device),
-            }
-        )
-    return summary

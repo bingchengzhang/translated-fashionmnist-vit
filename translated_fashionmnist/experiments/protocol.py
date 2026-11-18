@@ -1,4 +1,4 @@
-"""Training and evaluation protocol for the controlled comparisons."""
+"""Fit each configuration on A and on B, then score both test sets."""
 
 from __future__ import annotations
 
@@ -24,8 +24,12 @@ from ..data import (
     split_train_validation,
 )
 from ..engine import evaluate, train_epoch, validate_training_settings
-from ..models import CNNClassifier, MLPClassifier, VisionTransformer
-from ..models import count_trainable_parameters
+from ..models import (
+    CNNClassifier,
+    MLPClassifier,
+    VisionTransformer,
+    count_trainable_parameters,
+)
 from ..utils import (
     plot_history,
     resolve_device,
@@ -33,7 +37,6 @@ from ..utils import (
     set_seed,
     write_csv,
 )
-
 from .config import (
     EXPERIMENTS,
     SETTING_ORDER,
@@ -71,7 +74,7 @@ def build_model(
     image_size: int = 64,
     num_classes: int = 10,
 ) -> nn.Module:
-    """Construct one architecture while keeping the protocol configuration separate."""
+    """Build the model named by one experiment definition."""
     if definition.model_type == "mlp":
         return MLPClassifier(image_size=image_size, num_classes=num_classes)
     if definition.model_type == "cnn":
@@ -242,7 +245,9 @@ def fit_model(
 ):
     set_seed(config.seed, deterministic=config.deterministic)
     device = resolve_device(config.device)
-    run_dir = Path(config.output_dir) / "runs" / definition.config_id / f"train_{train_mode}"
+    run_dir = (
+        Path(config.output_dir) / "runs" / definition.config_id / f"train_{train_mode}"
+    )
     run_dir.mkdir(parents=True, exist_ok=True)
     expected_metadata = _expected_metadata(definition, config, train_mode)
     model = build_model(definition, image_size=config.canvas_size).to(device)
@@ -273,7 +278,9 @@ def fit_model(
         else:
             result["checkpoint"] = str(checkpoint_path)
             save_json(result, run_dir / "training_result.json")
-            metadata = json.loads((run_dir / "metadata.json").read_text(encoding="utf-8"))
+            metadata = json.loads(
+                (run_dir / "metadata.json").read_text(encoding="utf-8")
+            )
             metadata["experiment"] = expected_metadata
             save_json(metadata, run_dir / "metadata.json")
             print(f"Reusing {definition.config_id}, train {train_mode}")

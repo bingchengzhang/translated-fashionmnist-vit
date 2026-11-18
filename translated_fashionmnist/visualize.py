@@ -1,4 +1,4 @@
-"""Render compact A/B sample pairs for inspection or reports."""
+"""Save a row of A/B canvas samples."""
 
 from __future__ import annotations
 
@@ -10,7 +10,6 @@ import matplotlib.pyplot as plt
 from torchvision import datasets, transforms
 
 from .data import TranslatedFashionMNIST
-
 
 CLASS_NAMES = (
     "T-shirt/top",
@@ -36,7 +35,11 @@ def create_parser() -> argparse.ArgumentParser:
     parser.add_argument("--canvas-size", type=int, default=64)
     parser.add_argument("--num-samples", type=int, default=3)
     parser.add_argument("--seed", type=int, default=42)
-    parser.add_argument("--download", action=argparse.BooleanOptionalAction, default=False)
+    parser.add_argument(
+        "--download",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+    )
     parser.add_argument("--show", action="store_true")
     return parser
 

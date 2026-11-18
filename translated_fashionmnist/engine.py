@@ -1,4 +1,4 @@
-"""Shared training and evaluation primitives."""
+"""One training epoch and one evaluation pass."""
 
 from __future__ import annotations
 
@@ -21,7 +21,7 @@ class TrainingSettings(Protocol):
 
 
 def validate_training_settings(settings: TrainingSettings) -> None:
-    """Reject invalid values before datasets or checkpoints are created."""
+    """Raise ValueError when a training setting is out of range."""
     if settings.epochs < 1:
         raise ValueError("epochs must be at least 1.")
     if settings.batch_size < 1:

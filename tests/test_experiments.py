@@ -13,15 +13,15 @@ from translated_fashionmnist.experiments.config import (
     SETTING_ORDER,
     configuration_ids_for_groups,
 )
-from translated_fashionmnist.experiments.run import (
-    consolidate_training_history,
-    create_parser,
-)
 from translated_fashionmnist.experiments.protocol import (
     ProtocolConfig,
     _can_resume,
     _expected_metadata,
     build_model,
+)
+from translated_fashionmnist.experiments.run import (
+    consolidate_training_history,
+    create_parser,
 )
 from translated_fashionmnist.models import (
     ConvPatchEmbedding,
@@ -142,10 +142,7 @@ class ExperimentTests(unittest.TestCase):
             root = Path(directory)
             for mode in ("A", "B"):
                 write_csv(
-                    [
-                        {"epoch": epoch, **fields}
-                        for epoch in (1, 2)
-                    ],
+                    [{"epoch": epoch, **fields} for epoch in (1, 2)],
                     root / "runs" / "mlp" / f"train_{mode}" / "history.csv",
                 )
             rows = consolidate_training_history(root, ["mlp"], epochs=2)

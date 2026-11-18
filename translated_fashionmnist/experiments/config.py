@@ -1,4 +1,4 @@
-"""Experiment definitions shared by the runners and visualizations."""
+"""The six configurations, and which comparison each belongs to."""
 
 from __future__ import annotations
 

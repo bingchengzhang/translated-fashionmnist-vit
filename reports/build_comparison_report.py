@@ -27,7 +27,6 @@ from reportlab.platypus import (
     TableStyle,
 )
 
-
 ROOT = Path(__file__).resolve().parents[1]
 METRICS_PATH = ROOT / "results" / "metrics.csv"
 HISTORY_PATH = ROOT / "results" / "training_history.csv"
@@ -160,7 +159,7 @@ def load_training_history() -> dict[tuple[str, str], list[dict[str, float]]]:
 
 
 def load_manifest() -> dict:
-    """Load the recorded protocol and environment used by the report."""
+    """Load manifest.json and check the fields the report reads."""
     manifest = json.loads(MANIFEST_PATH.read_text(encoding="utf-8"))
     if set(manifest.get("configurations", [])) != REPORT_CONFIG_IDS:
         raise ValueError("Manifest does not describe the six report configurations.")
@@ -493,7 +492,6 @@ def finding_strip(
     entries: list[tuple[str, str, str]],
     style_map,
 ) -> Table:
-    """Create a compact row of evidence cards."""
     return Table(
         [
             [Paragraph(label, style_map["FindingLabel"]) for label, _, _ in entries],
@@ -521,7 +519,7 @@ def chart_block(drawing: Drawing, caption: str, style_map) -> KeepTogether:
 
 
 def make_protocol_flow() -> Drawing:
-    """Show how each configuration produces its four reported measurements."""
+    """Split, place, train, select a checkpoint, then test on A and B."""
     drawing = Drawing(164 * mm, 35 * mm)
     steps = (
         ("FIXED SPLIT", "54,000 train", "6,000 validation"),
@@ -606,7 +604,7 @@ def make_protocol_flow() -> Drawing:
 
 
 def make_vit_pipeline() -> Drawing:
-    """Summarize the exact ViT used in the controlled ablations."""
+    """ViT used for the patch-size and patch-projection comparisons."""
     drawing = Drawing(164 * mm, 52 * mm)
     steps = (
         ("IMAGE", "1 x 64 x 64", "grayscale"),
@@ -702,7 +700,7 @@ def make_vit_pipeline() -> Drawing:
 
 
 def make_embedding_equivalence() -> Drawing:
-    """Contrast the two patch-projection implementations used at p=16."""
+    """Conv2d and Flatten + Linear patch projections at patch size 16."""
     drawing = Drawing(164 * mm, 39 * mm)
     panel_width = 79 * mm
     panels = (
@@ -783,7 +781,7 @@ def make_embedding_equivalence() -> Drawing:
 def make_training_curve_chart(
     histories: dict[tuple[str, str], list[dict[str, float]]],
 ) -> Drawing:
-    """Plot validation accuracy for the three architecture baselines."""
+    """Validation accuracy for MLP, CNN, and the patch-8 ViT."""
     drawing = Drawing(164 * mm, 88 * mm)
     series = (
         ("mlp", "MLP", GRAY),

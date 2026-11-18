@@ -127,7 +127,9 @@ class ModelTests(unittest.TestCase):
         self.assertEqual(tuple(logits.shape), (4, 10))
         loss = nn.CrossEntropyLoss()(logits, labels)
         loss.backward()
-        self.assertTrue(any(parameter.grad is not None for parameter in model.parameters()))
+        self.assertTrue(
+            any(parameter.grad is not None for parameter in model.parameters())
+        )
 
     def test_linear_patch_embedding(self):
         model = VisionTransformer(

@@ -1,4 +1,4 @@
-"""Classification models for translated 64 x 64 FashionMNIST images."""
+"""MLP, CNN, and ViT classifiers for single-channel images."""
 
 from __future__ import annotations
 
@@ -7,6 +7,8 @@ from torch import nn
 
 
 class ConvPatchEmbedding(nn.Module):
+    """Non-overlapping patches, projected with a strided convolution."""
+
     def __init__(
         self,
         image_size: int,
@@ -34,7 +36,7 @@ class ConvPatchEmbedding(nn.Module):
 
 
 class LinearPatchEmbedding(nn.Module):
-    """Flatten every patch and project it with a linear layer."""
+    """Non-overlapping patches, flattened and projected with nn.Linear."""
 
     def __init__(
         self,
@@ -139,7 +141,7 @@ class VisionTransformer(nn.Module):
 
 
 class MLPClassifier(nn.Module):
-    """Compact MLP baseline for grayscale inputs."""
+    """Two-hidden-layer MLP on flattened pixels."""
 
     def __init__(self, image_size: int = 64, num_classes: int = 10) -> None:
         super().__init__()
@@ -164,7 +166,7 @@ class MLPClassifier(nn.Module):
 
 
 class CNNClassifier(nn.Module):
-    """Compact CNN with local receptive fields and shared spatial filters."""
+    """Conv net with two max-pool stages and a small classifier head."""
 
     def __init__(self, num_classes: int = 10) -> None:
         super().__init__()
@@ -200,4 +202,6 @@ class CNNClassifier(nn.Module):
 
 
 def count_trainable_parameters(model: nn.Module) -> int:
-    return sum(parameter.numel() for parameter in model.parameters() if parameter.requires_grad)
+    return sum(
+        parameter.numel() for parameter in model.parameters() if parameter.requires_grad
+    )

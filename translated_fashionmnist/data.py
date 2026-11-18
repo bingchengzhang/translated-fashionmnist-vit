@@ -1,4 +1,4 @@
-"""Position-controlled FashionMNIST datasets."""
+"""FashionMNIST pasted onto a fixed-size canvas."""
 
 from __future__ import annotations
 
@@ -14,7 +14,6 @@ from torchvision.transforms import functional as TF
 from .utils import seed_worker
 
 PositionMode = Literal["A", "B", "random", "center"]
-POSITION_MODES = ("A", "B")
 TRAIN_POSITION_SEED_OFFSET = 101
 VALIDATION_POSITION_SEED_OFFSET = 202
 TEST_POSITION_SEED_OFFSET = 303
@@ -42,7 +41,7 @@ def load_fashion_mnist(
 
 
 def limit_dataset(dataset: Dataset, limit: int) -> Dataset:
-    """Return a deterministic prefix for smoke runs; non-positive means no limit."""
+    """First `limit` items, or the full dataset when limit is not positive."""
     if limit <= 0 or limit >= len(dataset):
         return dataset
     return Subset(dataset, range(limit))
@@ -55,7 +54,7 @@ def split_train_validation(
     train_limit: int = 0,
     val_limit: int = 0,
 ) -> tuple[Dataset, Dataset]:
-    """Create one deterministic, disjoint train/validation split."""
+    """Deterministic disjoint split. Optional limits truncate each side."""
     if not 0 < val_fraction < 1:
         raise ValueError("val_fraction must be between 0 and 1.")
     val_size = round(len(dataset) * val_fraction)
@@ -77,7 +76,7 @@ def create_data_loader(
     shuffle: bool,
     pin_memory: bool,
 ) -> DataLoader:
-    """Build a seeded loader with consistent worker behavior."""
+    """DataLoader with a fixed shuffle seed and per-worker RNG seeding."""
     generator = torch.Generator().manual_seed(seed)
     return DataLoader(
         dataset,
@@ -101,11 +100,11 @@ def normalize_mode(mode: PositionMode | str) -> Literal["A", "B"]:
 
 
 class TranslatedFashionMNIST(Dataset):
-    """Place each FashionMNIST image on a larger canvas.
+    """Paste each FashionMNIST image onto a larger black canvas.
 
-    Mode A uses a deterministic pseudo-random location for every sample.
-    Mode B places every sample in the center. Deterministic positions make
-    repeated experiments comparable without storing multi-gigabyte .pt files.
+    Mode A gives every sample one deterministic pseudo-random location.
+    Mode B centers every sample. Positions are recomputed from the seed,
+    so canvases are not stored on disk.
     """
 
     def __init__(
@@ -123,8 +122,7 @@ class TranslatedFashionMNIST(Dataset):
         self.seed = int(seed)
         self.return_position = return_position
         self.resample_each_epoch = resample_each_epoch
-        # A shared tensor keeps persistent DataLoader workers synchronized when
-        # the training loop advances the epoch.
+        # share_memory_ so persistent workers observe set_epoch().
         self._epoch = torch.zeros((), dtype=torch.int64).share_memory_()
 
         if self.canvas_size < 28:
@@ -146,12 +144,10 @@ class TranslatedFashionMNIST(Dataset):
 
     def _random_position(self, index: int, height: int, width: int) -> tuple[int, int]:
         epoch = self.epoch if self.resample_each_epoch else 0
-        # Use a per-sample generator so positions do not depend on DataLoader order.
-        mixed_seed = (
-            self.seed
-            + int(index) * 1_000_003
-            + epoch * 10_000_019
-        ) % (2**63 - 1)
+        # Seed from the index, not from DataLoader order.
+        mixed_seed = (self.seed + int(index) * 1_000_003 + epoch * 10_000_019) % (
+            2**63 - 1
+        )
         generator = torch.Generator().manual_seed(mixed_seed)
         max_y = self.canvas_size - height
         max_x = self.canvas_size - width
@@ -182,9 +178,13 @@ class TranslatedFashionMNIST(Dataset):
             tensor = TF.to_tensor(image)
 
         if tensor.ndim != 3:
-            raise ValueError(f"Expected image with [C,H,W] dimensions, got {tensor.shape}.")
+            raise ValueError(
+                f"Expected image with [C, H, W] dimensions, got {tensor.shape}."
+            )
         if tensor.shape[0] != 1:
-            raise ValueError(f"FashionMNIST must be grayscale, got {tensor.shape[0]} channels.")
+            raise ValueError(
+                f"FashionMNIST must be grayscale, got {tensor.shape[0]} channels."
+            )
         return tensor
 
     def __getitem__(self, index: int):

@@ -1,6 +1,8 @@
 __pycache__/
 *.py[cod]
 .pytest_cache/
+.mypy_cache/
+.ruff_cache/
 .ipynb_checkpoints/
 
 # Local datasets and experiment artifacts
@@ -12,8 +14,22 @@ checkpoints/
 results_smoke/
 results/runs/
 dist/
+build/
+*.egg-info/
+.eggs/
+
+# Coverage and logs
+.coverage
+.coverage.*
+htmlcov/
+*.log
 
 # Environments and editors
 .venv/
+venv/
 .idea/
 .vscode/
+.DS_Store
+Thumbs.db
+*~
+*.swp

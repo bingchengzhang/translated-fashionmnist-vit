@@ -1,4 +1,4 @@
-"""Run the controlled study and write a complete, self-contained record."""
+"""Train the selected comparisons and write metrics, history, and figures."""
 
 from __future__ import annotations
 
@@ -16,7 +16,6 @@ from ..utils import save_json, write_csv
 from .config import GROUPS, configuration_ids_for_groups
 from .plots import generate_visualizations
 from .protocol import ProtocolConfig, run_configuration
-
 
 HISTORY_FIELDS = (
     "epoch",
@@ -40,7 +39,10 @@ def create_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--output-dir",
         default="outputs/comparison",
-        help="Run directory. The committed results/ record is never overwritten by default.",
+        help=(
+            "Run directory. The committed results/ record is never "
+            "overwritten by default."
+        ),
     )
     parser.add_argument("--epochs", type=int, default=15)
     parser.add_argument("--batch-size", type=int, default=64)
@@ -56,7 +58,11 @@ def create_parser() -> argparse.ArgumentParser:
         action=argparse.BooleanOptionalAction,
         default=False,
     )
-    parser.add_argument("--download", action=argparse.BooleanOptionalAction, default=False)
+    parser.add_argument(
+        "--download",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+    )
     parser.add_argument("--resume", action=argparse.BooleanOptionalAction, default=True)
     parser.add_argument("--limit-train-samples", type=int, default=0)
     parser.add_argument("--limit-val-samples", type=int, default=0)
@@ -69,7 +75,7 @@ def consolidate_training_history(
     configuration_ids: list[str],
     epochs: int,
 ) -> list[dict[str, object]]:
-    """Merge per-fit histories into the record consumed by the report."""
+    """Merge per-fit history.csv files into training_history.csv."""
     root = Path(output_dir)
     rows: list[dict[str, object]] = []
     for config_id in configuration_ids:
@@ -86,7 +92,8 @@ def consolidate_training_history(
             observed_epochs = [int(record["epoch"]) for record in records]
             if observed_epochs != list(range(1, epochs + 1)):
                 raise ValueError(
-                    f"Expected epochs 1..{epochs} in {history_path}, got {observed_epochs}."
+                    f"Expected epochs 1..{epochs} in {history_path}, "
+                    f"got {observed_epochs}."
                 )
             rows.extend(
                 {

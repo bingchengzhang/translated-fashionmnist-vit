@@ -1,4 +1,4 @@
-"""Baseline and controlled comparison experiments."""
+"""Names and groups for the six configurations."""
 
 from .config import EXPERIMENTS, GROUPS, ExperimentDefinition
 

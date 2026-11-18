@@ -1,4 +1,4 @@
-"""Build one compact teaching-assistant submission archive."""
+"""Pack the course submission zip: report, metrics, and source."""
 
 from __future__ import annotations
 
@@ -9,7 +9,6 @@ import json
 import re
 import zipfile
 from pathlib import Path
-
 
 ROOT = Path(__file__).resolve().parents[1]
 ARCHIVE_ROOT = Path("translated-fashionmnist-submission")
@@ -27,20 +26,16 @@ FORMAL_CONFIG_IDS = {
     "vit_p16_linear",
 }
 
-SUBMISSION_README = """# Submission guide
+SUBMISSION_README = """# Submission
 
-This archive contains the controlled comparison study.
+1. REPORT.pdf - write-up.
+2. RESULTS.csv - 24 test measurements.
+3. SOURCE_CODE.zip - source, tests, training histories, and the environment record.
 
-Read the files in this order:
-
-1. REPORT.pdf - experimental report.
-2. RESULTS.csv - all 24 formal test measurements.
-3. SOURCE_CODE.zip - source, tests, training histories, and environment record.
-
-The study compares MLP, CNN, and ViT; ViT patch sizes 4, 8, and 16; and Conv2d
-against Flatten + Linear patch embedding. Formal runs use seed 42 and
-validation-based checkpoint selection. Results come from one training and
-placement seed, so small numerical differences are not significance claims.
+Compared: MLP, CNN, and ViT; ViT patch sizes 4, 8, and 16; Conv2d versus
+Flatten + Linear patch embedding. The recorded run uses seed 42 and keeps
+the checkpoint with the highest validation accuracy. One training seed and
+one placement seed; small gaps are not a significance claim.
 
 To reproduce, extract SOURCE_CODE.zip and run:
 
@@ -49,41 +44,35 @@ To reproduce, extract SOURCE_CODE.zip and run:
     python -m translated_fashionmnist.experiments.run --groups all --download
 
 Datasets, checkpoints, caches, duplicate figures, and per-run folders are
-intentionally excluded.
+left out.
 """
 
-SOURCE_README = """# Source code
+SOURCE_README = """# Source
 
-All controlled comparisons share one data pipeline, training engine, and
-experiment registry:
+One data pipeline, one training loop, and one experiment list:
 
     translated_fashionmnist/
-        data.py             loading, fixed split, loaders, and A/B canvases
-        engine.py           shared training and evaluation loops
-        models.py           MLP, CNN, ViT, and patch embeddings
-        utils.py
-        visualize.py
+        data.py             load, fixed split, loaders, A/B canvases
+        engine.py           train and evaluate steps
+        models.py           MLP, CNN, ViT, patch embeddings
+        utils.py            seeding and CSV/JSON
+        visualize.py        A/B sample figure
         experiments/
-            config.py       experiment definitions
-            protocol.py     common comparison protocol
-            run.py          single formal experiment entry point
+            config.py       the six configurations
+            protocol.py     fit on A and B, test on both
+            run.py          experiment entry point
             plots.py        comparison figures
     results/
         training_history.csv
         manifest.json
 
-Run the tests:
-
     python -m unittest discover -s tests -v
-
-Run all comparisons:
-
     python -m translated_fashionmnist.experiments.run --groups all --download
 """
 
 
 def code_files() -> list[tuple[Path, Path]]:
-    """Return files for the nested modular source archive."""
+    """Files copied into the nested SOURCE_CODE.zip."""
     files: list[tuple[Path, Path]] = [
         (ROOT / "requirements.txt", Path("requirements.txt")),
         (ROOT / "requirements-lock.txt", Path("requirements-lock.txt")),
@@ -112,16 +101,13 @@ def validate_sources(files: list[tuple[Path, Path]]) -> None:
 
 
 def validate_metrics(path: Path) -> None:
-    """Require one complete 4-setting record for every formal configuration."""
+    """Require four test settings for each of the six recorded configurations."""
     with path.open(newline="", encoding="utf-8") as file:
         rows = list(csv.DictReader(file))
     required = {"config_id", "train_mode", "test_mode", "test_accuracy"}
     if not rows or not required.issubset(rows[0]):
         raise ValueError("Metrics file is empty or missing required columns.")
-    keys = {
-        (row["config_id"], row["train_mode"], row["test_mode"])
-        for row in rows
-    }
+    keys = {(row["config_id"], row["train_mode"], row["test_mode"]) for row in rows}
     configurations = {row["config_id"] for row in rows}
     expected_configurations = FORMAL_CONFIG_IDS
     expected_settings = {("A", "A"), ("B", "B"), ("A", "B"), ("B", "A")}
@@ -142,7 +128,7 @@ def validate_metrics(path: Path) -> None:
         or not complete
         or not valid_accuracies
     ):
-        raise ValueError("Expected 24 unique formal measurements.")
+        raise ValueError("Expected 24 unique test measurements.")
 
 
 def validate_history(path: Path) -> None:
@@ -161,9 +147,7 @@ def validate_history(path: Path) -> None:
     if not rows or not required.issubset(rows[0]):
         raise ValueError("Training history is empty or missing required columns.")
     expected_runs = {
-        (config_id, mode)
-        for config_id in FORMAL_CONFIG_IDS
-        for mode in ("A", "B")
+        (config_id, mode) for config_id in FORMAL_CONFIG_IDS for mode in ("A", "B")
     }
     observed_runs = {(row["config_id"], row["train_mode"]) for row in rows}
     complete = all(
@@ -180,22 +164,29 @@ def validate_history(path: Path) -> None:
         for row in rows
         for field in ("train_accuracy", "val_accuracy")
     )
-    if len(rows) != 180 or observed_runs != expected_runs or not complete or not bounded:
+    if (
+        len(rows) != 180
+        or observed_runs != expected_runs
+        or not complete
+        or not bounded
+    ):
         raise ValueError("Expected 12 complete 15-epoch training histories.")
 
 
 def validate_manifest(path: Path) -> None:
     manifest = json.loads(path.read_text(encoding="utf-8"))
     if set(manifest.get("configurations", [])) != FORMAL_CONFIG_IDS:
-        raise ValueError("Manifest does not describe the six formal configurations.")
+        raise ValueError("Manifest does not list the six recorded configurations.")
     if manifest.get("fit_count") != 12 or manifest.get("evaluation_count") != 24:
         raise ValueError("Manifest must record 12 fits and 24 evaluations.")
     if not {"protocol", "method", "environment"}.issubset(manifest):
-        raise ValueError("Manifest is missing protocol, method, or environment details.")
+        raise ValueError(
+            "Manifest is missing protocol, method, or environment details."
+        )
 
 
 def validate_report(path: Path) -> int:
-    """Check the generated ReportLab PDF without adding another dependency."""
+    """Count PDF pages from the file bytes, without another dependency."""
     content = path.read_bytes()
     if not content.startswith(b"%PDF-"):
         raise ValueError("Report is not a PDF.")

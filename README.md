@@ -1,30 +1,28 @@
-# Spatial Generalization on Translated FashionMNIST
+# Translated FashionMNIST
 
-A controlled study of how MLP, CNN, and Vision Transformer classifiers respond
-when FashionMNIST objects move within a 64 x 64 canvas.
+MLP, CNN, and Vision Transformer classifiers trained on FashionMNIST images
+placed at controlled positions on a 64 x 64 canvas.
 
-[Report (PDF)](reports/comparison_study.pdf) ·
-[Formal metrics](results/metrics.csv) ·
-[Experiment record](results/README.md)
+[Report](reports/comparison_study.pdf) ·
+[Metrics](results/metrics.csv) ·
+[Run record](results/README.md)
 
-## Study design
+## Experiment
 
-Each 28 x 28 FashionMNIST image is placed on a black 64 x 64 canvas.
+Each 28 x 28 image is pasted onto a black 64 x 64 canvas.
 
-- **Distribution A — random:** each sample is assigned a fixed pseudorandom
-  valid position.
-- **Distribution B — centered:** every sample is placed at top-left coordinate
-  `(18, 18)`.
+- **A (random):** one fixed pseudorandom valid position per sample.
+- **B (centered):** every sample at top-left `(18, 18)`.
 
-Each configuration is trained once on A and once on B. Both fitted models are
-then evaluated on A and B, giving four settings: A -> A, B -> B, A -> B, and
-B -> A.
+Each configuration is trained on A and on B. Both checkpoints are evaluated
+on A and on B, so each configuration has four scores: A -> A, B -> B,
+A -> B, and B -> A.
 
-The study contains three comparisons:
+Three comparisons, six configurations:
 
-1. MLP, CNN, and ViT with patch size 8;
-2. ViT patch sizes 4, 8, and 16;
-3. Conv2d and Flatten + Linear patch projections at patch size 16.
+1. MLP, CNN, and ViT with patch size 8.
+2. ViT patch sizes 4, 8, and 16.
+3. Conv2d versus Flatten + Linear patch projection, both at patch size 16.
 
 ## Results
 
@@ -37,37 +35,38 @@ The study contains three comparisons:
 | ViT, patch 16 | 829,834 | 80.07% | 88.87% | 80.97% | 16.91% |
 | ViT, patch 16 (Linear) | 829,834 | 79.67% | 88.80% | 80.48% | 16.30% |
 
-Across all six configurations, switching the test distribution from A to B
-after training on A changes accuracy by at most 0.90 percentage points. The
-reverse shift is much harder: models trained only at the center lose
-57.74-75.58 points on random positions. CNN leads every setting while using the
-fewest parameters in the comparison. Among the ViTs, patch size 8 leads three
-settings; the two patch projections remain within 0.61 points.
-
 ![Architecture comparison](results/figures/model_comparison.png)
 
-These are single-seed results. Small differences are not treated as
-statistically significant.
+Training on A and testing on B moves accuracy by at most 0.90 percentage
+points. Training on B and testing on A drops it by 57.74-75.58 points. CNN
+is ahead in every column and has the fewest parameters. Among the ViTs,
+patch size 8 is ahead on three of the four settings. The two patch-16
+projections stay within 0.61 points of each other.
+
+One training seed and one set of placement seeds. Gaps this small are not
+a significance claim.
 
 ## Setup
+
+From the repository root:
 
 ```bash
 python -m pip install -r requirements.txt
 ```
 
-The formal record was produced with Python 3.12.13. Exact package versions are
-in `requirements-lock.txt`; hardware and runtime details are in
+The table above was produced with Python 3.12.13. Pinned versions are in
+`requirements-lock.txt`. GPU, CUDA, and the exact protocol are in
 `results/manifest.json`.
 
-## Quick check
+## Run
 
-Run the unit and protocol checks:
+Tests:
 
 ```bash
 python -m unittest discover -s tests -v
 ```
 
-For a short end-to-end check:
+One-epoch smoke test. Files go to `outputs/`, which is gitignored:
 
 ```bash
 python -m translated_fashionmnist.experiments.run \
@@ -80,9 +79,7 @@ python -m translated_fashionmnist.experiments.run \
   --download
 ```
 
-The command writes only to the ignored `outputs/` directory.
-
-## Full reproduction
+Full run, same protocol as the recorded numbers:
 
 ```bash
 python -m translated_fashionmnist.experiments.run \
@@ -98,53 +95,49 @@ python -m translated_fashionmnist.experiments.run \
   --download
 ```
 
-| Item | Formal setting |
+| Item | Setting |
 |---|---|
-| Training / validation split | 54,000 / 6,000, fixed with seed 42 |
-| Test set | official 10,000-image FashionMNIST test partition |
-| Optimizer | AdamW with cosine annealing |
-| Checkpoint rule | highest validation accuracy |
-| Configurations / fitted models | 6 / 12 |
-| Final evaluations | 24 |
-| Determinism | seeded; deterministic algorithms disabled |
+| Train / validation | 54,000 / 6,000, split with seed 42 |
+| Test | official 10,000-image FashionMNIST test set |
+| Optimizer | AdamW, cosine annealing |
+| Checkpoint | highest validation accuracy |
+| Configurations / fits / test evals | 6 / 12 / 24 |
+| Determinism | seeded; deterministic algorithms off |
 
-The test partition is used only after checkpoint selection. Every configuration
-shares the same split and test placements.
+The test set is used only after the checkpoint is chosen. Every
+configuration uses the same split and the same test placements.
 
-## Code map
+Sample canvases (written to `outputs/data_samples.png`):
 
-```text
-translated_fashionmnist/
-|-- data.py                 fixed split and A/B canvases
-|-- models.py               MLP, CNN, ViT, and patch projections
-|-- engine.py               shared training and evaluation steps
-|-- utils.py                seeds and result serialization
-|-- visualize.py            paired A/B dataset examples
-`-- experiments/
-    |-- config.py           six comparison definitions
-    |-- protocol.py         common fit/evaluate protocol
-    |-- run.py              single formal experiment entry point
-    `-- plots.py            figures generated from metrics
-results/
-|-- metrics.csv             24 final test measurements
-|-- training_history.csv    12 complete training histories
-|-- manifest.json           protocol and environment record
-`-- figures/                three comparison figures
-reports/                    report PDF and reproducible builder
-tests/                      dataset, model, protocol, and record checks
-tools/                      compact submission builder
+```bash
+python -m translated_fashionmnist.visualize --download
 ```
 
-Build the four-file submission archive:
+Submission zip (report, metrics CSV, and a source archive):
 
 ```bash
 python tools/build_submission.py
 ```
 
-## Scope
+Rebuild the PDF from the committed CSVs. This overwrites
+`reports/comparison_study.pdf`:
 
-The models share a training recipe but are not matched for parameter count or
-tuned separately. The record contains one training seed and one fixed set of
-placement seeds, so it provides no uncertainty estimate. The experiment
-isolates translation on a black canvas; it does not test rotation, scale,
-clutter, or natural-image shifts.
+```bash
+python reports/build_comparison_report.py
+```
+
+## Layout
+
+```text
+translated_fashionmnist/   dataset, models, training loop, experiment runner
+results/                   metrics, training history, figures, manifest
+reports/                   PDF, sample figure, fonts, report builder
+tests/
+tools/build_submission.py
+```
+
+## What this does not show
+
+The models share one training recipe. Parameter counts are not matched, and
+nothing was tuned per model. There is no second seed, so there is no error
+bar. The only shift is translation on a black canvas.
